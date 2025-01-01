@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>enチャット</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;900&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1A1B25">
+    
+    <!-- PWA manifest -->
+    <link rel="manifest" href="manifest.json">
+    <!-- iOS icons -->
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+</head>
+<body>
+
+
+    <div class="accordion">
+        <div class="row header">
+            <span>enチャット</span>
+            <div class="triangle"></div>
+        </div>
+        <div class="row hidden">QRコードをスキャンしてチャットする</div>
+        <div class="row hidden">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://example.com" alt="QR Code" class="qr-code">
+        </div>
+        <div class="row hidden">https://enjpchat.onrender.com?room=35dbbf59</div>
+        <div class="row hidden">
+            <div class="lang-toggle">
+                <div class="lang-background"></div>
+                <span class="lang-option active">en</span>
+                <span class="lang-option">jp</span>
+            </div>
+        </div>
+        <div class="row">
+            <div><span class="status-dot"></span>guest</div>
+            <!-- <div><span class="status-dot"></span>guest 2</div> -->
+            <!-- <div><span class="status-dot"></span>guest 3</div> -->
+            <div>
+                <span class="translate-icon">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M5.07857 0.0327941C5.45543 0.0438585 5.72821 0.418792 5.63265 0.783505V0.783505C5.35894 2.06186 5.11405 4.04124 5.11405 5.7457C5.11405 7.47744 5.37966 8.80716 5.7283 9.97876C5.86937 10.4528 5.60685 10.9583 5.13082 11.0926V11.0926C4.69238 11.2163 4.23189 10.9775 4.11163 10.5381C3.7764 9.31323 3.5006 7.66239 3.5006 6.02062C3.5006 4.21993 3.7599 2.19931 3.91837 0.838488V0.838488C3.96545 0.389266 4.34999 0.0114035 4.80148 0.0246589L5.07857 0.0327941ZM3.2557 1.56701C5.61173 1.56701 7.55149 1.47535 9.45166 1.12545C9.92632 1.03805 10.3763 1.39216 10.3807 1.87478V1.87478C10.3841 2.24432 10.12 2.56276 9.75424 2.61591C7.80684 2.89889 5.16668 3.06529 3.21248 3.06529C2.67569 3.06529 1.96086 3.03132 1.34838 3.00159C0.954211 2.98246 0.639886 2.66279 0.629101 2.2683V2.2683C0.616479 1.80666 1.02025 1.43966 1.48044 1.47851C2.0436 1.52605 2.7194 1.56701 3.2557 1.56701ZM8.58121 3.37869C9.04395 3.48638 9.31049 4.00136 9.15351 4.44978C9.1121 4.56807 9.07497 4.67543 9.04682 4.75601C8.22569 7.23024 6.7419 9.08591 5.37335 10.0481C4.43697 10.7079 3.18367 11.3127 1.93037 11.3127C0.878752 11.3127 0 10.7079 0 9.30584C0 7.3677 1.81513 5.34708 4.10564 4.54983C5.05642 4.21993 6.2377 4.01375 7.31813 4.01375C10.012 4.01375 12 5.49828 12 7.64261C12 9.50316 10.9005 11.3013 7.74088 11.9179C7.44985 11.9747 7.15591 11.8421 6.99215 11.5949V11.5949C6.67508 11.1162 6.98222 10.469 7.53674 10.3201C9.41937 9.81472 10.2137 8.69702 10.2137 7.56014C10.2137 6.39175 9.16207 5.40206 7.21729 5.40206C5.90636 5.40206 4.86915 5.75945 4.16327 6.06186C2.72269 6.7079 1.69988 8.02749 1.69988 8.94845C1.69988 9.40206 1.88716 9.63574 2.36255 9.63574C3.03962 9.63574 4.0048 9.18213 4.88355 8.39863C5.93517 7.47766 6.91477 6.2543 7.491 4.35739C7.51882 4.27773 7.54665 4.17504 7.57266 4.06175C7.67719 3.60648 8.12626 3.27281 8.58121 3.37869V3.37869Z" fill="#00FF2A"/>
+                        </svg>                        
+                </span>
+                me<span class="status-dot"></span>
+            </div>
+        </div>
+
+    </div>
+    <!-- <div class="message-display">a</div> -->
+
+
+    <div class="bottom-row">
+        <div class="message-input-container">
+            <textarea id="messageInput" placeholder="Type your message..." class="message-input" rows="1"></textarea>
+            <button class="send-button">
+                <svg width="16" height="14" viewBox="0 0 16 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 0L15.7942 13.5H0.205771L8 0Z" fill="#1A1B25"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+
+    <script src="script.js"></script>
+</body>
+</html>

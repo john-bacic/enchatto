@@ -1,0 +1,21 @@
+{
+  "name": "enチャット",
+  "short_name": "enチャット",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1A1B25",
+  "theme_color": "#1A1B25",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+} 

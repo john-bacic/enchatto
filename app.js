@@ -290,7 +290,7 @@ function handleReceivedMessage(data) {
     
     const textDiv = document.createElement('div');
     textDiv.className = 'text';
-    textDiv.textContent = data.message;
+    textDiv.textContent = data.content;  
     messageDiv.appendChild(textDiv);
     
     messagesContainer.appendChild(messageDiv);
@@ -323,7 +323,7 @@ function sendMessage() {
     if (message) {
         ws.send(JSON.stringify({
             type: 'message',
-            message: message
+            content: message  
         }));
         messageInput.value = '';
         // Blur input to dismiss keyboard on mobile

@@ -1,12 +1,10 @@
 const CACHE_NAME = 'enchatto-v1';
 const ASSETS_TO_CACHE = [
-    '/',
-    '/index.html',
-    '/style.css',
-    '/app.js',
-    '/manifest.json',
-    'https://cdn.jsdelivr.net/npm/qrcode-scanner@1.0.0/qrcode-scanner.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
+    '.',
+    'index.html',
+    'style.css',
+    'app.js',
+    'manifest.json'
 ];
 
 self.addEventListener('install', (event) => {

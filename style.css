@@ -71,8 +71,12 @@ body {
     width: 100%;
     max-width: 100%;
     margin: 0 auto;
-    background-color: var(--background-color);
     position: relative;
+    background-color: var(--background-color);
+    background-image: url('images/BGlines.svg');
+    background-repeat: repeat;
+    background-position: center;
+    background-size: auto;
     overflow: hidden;
 }
 
@@ -446,6 +450,7 @@ body {
     background: var(--background-color);
     border-top: 1px solid var(--background-darker-color);
     padding: 20px 10px;
+    margin-bottom: 20px;
     display: flex;
     gap: 10px;
     width: 100%;

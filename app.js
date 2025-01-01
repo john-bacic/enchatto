@@ -319,20 +319,33 @@ function handleNameChange(data) {
 
 // Send message
 function sendMessage() {
-    const messageText = messageInput.value.trim();
-    if (messageText && ws && ws.readyState === WebSocket.OPEN) {
-        const messageObj = {
+    const message = messageInput.value.trim();
+    if (message) {
+        ws.send(JSON.stringify({
             type: 'message',
-            content: messageText
-        };
-        console.log('Sending message:', messageObj);
-        ws.send(JSON.stringify(messageObj));
+            message: message
+        }));
+        messageInput.value = '';
+        // Blur input to dismiss keyboard on mobile
+        messageInput.blur();
     }
-
-    // Clear input and refocus
-    messageInput.value = '';
-    messageInput.focus();
 }
+
+// Add event listeners for sending messages
+sendBtn.addEventListener('click', () => {
+    sendMessage();
+    // Extra blur for mobile keyboard dismissal
+    messageInput.blur();
+});
+
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        sendMessage();
+        // Blur input to dismiss keyboard on mobile
+        messageInput.blur();
+    }
+});
 
 // Connect to WebSocket room
 function connectToRoom(roomId) {
@@ -425,12 +438,6 @@ function connectToRoom(roomId) {
         guestsContainer.innerHTML = '';
     }
 }
-
-// Add event listeners for sending messages
-sendBtn.addEventListener('click', sendMessage);
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendMessage();
-});
 
 // Generate random room ID
 function generateRoomId() {

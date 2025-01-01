@@ -78,7 +78,7 @@ body {
 
 @media screen and (max-width: 768px) {
     .chat-container {
-        padding-top: 80px;
+        padding-top: 90px;
 
     }
 }
@@ -121,7 +121,7 @@ body {
 }
 
 #expandBtn {
-    background: none;
+    background-color: var(--primary-color);
     border: none;
     color: var(--white);
     font-size: 1.2rem;
@@ -131,7 +131,7 @@ body {
 }
 
 #expandBtn:hover {
-    background-color: var(--white-10);
+    background-color: var(--primary-color);
 }
 
 #expandBtn.expanded {

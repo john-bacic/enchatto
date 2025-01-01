@@ -199,29 +199,34 @@ function updateGuestLabels() {
 
 // Function to make a name element editable
 function makeNameEditable(nameElement, isHost = false) {
-    nameElement.contentEditable = 'true';
-    nameElement.spellcheck = false;
-    nameElement.role = 'textbox';
-    nameElement.ariaLabel = 'Edit your name';
-    nameElement.classList.add('editable');
-    
-    // Handle name changes
-    nameElement.addEventListener('blur', () => {
-        const newName = nameElement.textContent.trim();
-        const defaultName = isHost ? 'Host' : 'Me';
-        if (newName && newName !== defaultName) {
-            ws.send(JSON.stringify({
-                type: 'name_change',
-                name: newName
-            }));
-        }
-    });
-    
-    nameElement.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            nameElement.blur();
-        }
+    nameElement.addEventListener('click', () => {
+        const currentName = nameElement.textContent;
+        nameElement.contentEditable = true;
+        nameElement.focus();
+        // Clear text on focus
+        nameElement.textContent = '';
+        
+        const saveEdit = () => {
+            const newName = nameElement.textContent.trim();
+            if (newName && newName !== currentName) {
+                ws.send(JSON.stringify({
+                    type: 'name_change',
+                    name: newName
+                }));
+            } else if (!newName) {
+                // If empty, restore the previous name
+                nameElement.textContent = currentName;
+            }
+            nameElement.contentEditable = false;
+        };
+        
+        nameElement.addEventListener('blur', saveEdit, { once: true });
+        nameElement.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                nameElement.blur();
+            }
+        });
     });
 }
 

@@ -79,6 +79,7 @@ body {
 @media screen and (max-width: 768px) {
     .chat-container {
         padding-top: 80px;
+
     }
 }
 
@@ -86,7 +87,10 @@ body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    width: 100%;
+    width: calc(100% - 20px);  
+    margin: 0 10px;  
+    border-radius: 16px;  
+    overflow: hidden;  
 }
 
 .header-main {

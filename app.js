@@ -348,7 +348,7 @@ messageInput.addEventListener('keypress', (e) => {
 
 // Update theme color based on role
 function updateThemeColor(isHost) {
-    const themeColor = isHost ? '#68B7CF' : '#1A1B25';
+    const themeColor = '#1A1B25';  // Same dark theme for both host and guest
     document.querySelector('meta[name="theme-color"]').setAttribute('content', themeColor);
 }
 

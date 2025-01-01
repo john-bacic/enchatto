@@ -346,6 +346,12 @@ messageInput.addEventListener('keypress', (e) => {
     }
 });
 
+// Update theme color based on role
+function updateThemeColor(isHost) {
+    const themeColor = isHost ? '#68B7CF' : '#1A1B25';
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', themeColor);
+}
+
 // Connect to WebSocket room
 function connectToRoom(roomId) {
     if (ws) {
@@ -376,6 +382,7 @@ function connectToRoom(roomId) {
             } else if (data.type === 'init') {
                 clientId = data.clientId;
                 isHost = data.isHost;
+                updateThemeColor(isHost);  // Update theme color on init
                 
                 // Show/hide QR code section based on role
                 if (!isHost) {

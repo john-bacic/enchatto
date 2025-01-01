@@ -130,7 +130,7 @@ wss.on('connection', (ws, req) => {
                 // Create message object with sender info
                 const messageObj = {
                     type: 'message',
-                    message: message.content,
+                    content: message.content,
                     senderId: clientId,
                     senderName: room.clients.find(c => c.clientId === clientId)?.name || 'Unknown',
                     isHost: isHost,

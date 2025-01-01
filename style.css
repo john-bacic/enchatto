@@ -73,10 +73,11 @@ body {
     margin: 0 auto;
     position: relative;
     background-color: var(--background-color);
-    background-image: url('images/BGlines.svg');
+    background-image: url('/images/BGlines.svg');
     background-repeat: repeat;
     background-position: center;
     background-size: auto;
+    background-blend-mode: soft-light;
     overflow: hidden;
 }
 
@@ -95,6 +96,7 @@ body {
     margin: 0 10px;  
     border-radius: 16px;  
     overflow: hidden;  
+    
 }
 
 .header-main {
@@ -239,6 +241,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  
 }
 
 #welcome-screen {

@@ -79,8 +79,12 @@ body {
     flex-direction: column;
     flex-shrink: 0;
     width: 100%;
-    
-    margin-top: 80px;
+}
+
+@media screen and (max-width: 768px) {
+    .chat-header {
+        margin-top: 80px;
+    }
 }
 
 .header-main {

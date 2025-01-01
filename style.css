@@ -67,7 +67,7 @@ body {
 .chat-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh;
     width: 100%;
     max-width: 100%;
     margin: 0 auto;
@@ -78,7 +78,7 @@ body {
 
 @media screen and (max-width: 768px) {
     .chat-container {
-        padding-top: 90px;
+        margin-top: 5px;
 
     }
 }

@@ -4,8 +4,8 @@
     "description": "QR Code based chat rooms",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#007bff",
+
+    "theme_color": "#68B7CF",
     "icons": [
         {
             "src": "icon-192x192.png",

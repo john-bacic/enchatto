@@ -337,6 +337,12 @@ body {
     opacity: 0.8;
 }
 
+[contenteditable=true]:empty:before {
+    content: 'Your name';
+    color: #999;
+    font-style: italic;
+}
+
 .messages {
     flex: 1;
     width: 100%;

@@ -202,9 +202,8 @@ function makeNameEditable(nameElement, isHost = false) {
     nameElement.addEventListener('click', () => {
         const currentName = nameElement.textContent;
         nameElement.contentEditable = true;
+        nameElement.textContent = '';  // Clear text to show placeholder
         nameElement.focus();
-        // Clear text on focus
-        nameElement.textContent = '';
         
         const saveEdit = () => {
             const newName = nameElement.textContent.trim();

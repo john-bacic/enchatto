@@ -1,6 +1,6 @@
 {
-    "name": "EnchattO",
-    "short_name": "EnchattO",
+    "name": "Enchatto",
+    "short_name": "Enchatto",
     "description": "QR Code based chat rooms",
     "start_url": "/",
     "display": "standalone",

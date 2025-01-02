@@ -176,12 +176,23 @@ wss.on('connection', (ws, req) => {
                 const client = room.clients.find(c => c.clientId === clientId);
                 if (client) {
                     client.name = message.name;
+                    
                     // Update session name
                     const session = Array.from(clientSessions.entries())
                         .find(([_, s]) => s.clientId === clientId);
                     if (session) {
                         session[1].name = message.name;
                     }
+                    
+                    // Broadcast name change to all clients
+                    broadcastToRoom(roomId, {
+                        type: 'name_change',
+                        clientId: clientId,
+                        name: message.name,
+                        isHost: client.isHost
+                    });
+                    
+                    // Also broadcast updated participant list
                     broadcastParticipants(roomId);
                 }
             } else if (message.type === 'message') {

@@ -77,112 +77,56 @@ messageInput.addEventListener('focus', () => {
 });
 
 // Update participants list
-function updateParticipants(newClientList) {
-    console.log('Updating participants:', newClientList);
-    
-    // Get list of disconnected users (in old list but not in new list)
-    const disconnectedUsers = clientList
-        .filter(oldClient => !newClientList.some(newClient => newClient.id === oldClient.id))
-        .map(client => client.id);
-    
-    // Fade out messages from disconnected users
-    if (disconnectedUsers.length > 0) {
-        disconnectedUsers.forEach(userId => {
-            document.querySelectorAll(`.message[data-sender="${userId}"]`).forEach(msg => {
-                msg.classList.add('disconnected');
-            });
-        });
-    }
-    
-    // Check for name changes and update message labels
-    newClientList.forEach(newClient => {
-        const oldClient = clientList.find(c => c.id === newClient.id);
-        if (oldClient && oldClient.name !== newClient.name) {
-            // Name has changed, update all message labels for this user
-            document.querySelectorAll(`.message[data-sender="${newClient.id}"] .guest-label`).forEach(label => {
-                label.textContent = newClient.name || (newClient.isHost ? 'Host' : `Guest ${newClient.colorIndex + 1}`);
-            });
-        }
-    });
-    
-    clientList = newClientList;
-    
-    // Clear existing guests
+function updateParticipants(clients) {
+    const guestsContainer = document.getElementById('guests');
     guestsContainer.innerHTML = '';
+    participants.clear();
     
-    // Find host client
-    const hostClient = newClientList.find(client => client.isHost);
-    const hostOnline = hostClient && hostClient.id;
-    
-    // Update host indicator and name
-    if (hostOnline) {
-        hostIndicator.classList.add('online');
-        hostName.textContent = hostClient.name || 'Host';
-        if (hostClient.id === clientId) {
-            makeNameEditable(hostName, true);
-        }
-    } else {
-        hostIndicator.classList.remove('online');
-    }
-    
-    // Sort guests by their color index to maintain consistent order
-    const sortedGuests = newClientList
-        .filter(client => !client.isHost)
-        .sort((a, b) => a.colorIndex - b.colorIndex);
-    
-    // Add each guest
-    sortedGuests.forEach((client) => {
-        const participantEl = document.createElement('div');
-        participantEl.className = 'participant';
-        participantEl.id = `participant-${client.id}`;
-        
-        const indicator = document.createElement('span');
-        indicator.className = 'status-indicator online';
-        const guestColor = getGuestColor(client.colorIndex);
-        indicator.style.backgroundColor = guestColor;
-        
-        const name = document.createElement('span');
-        name.className = 'name';
-        
-        // If it's the current client, make the name editable
-        if (client.id === clientId) {
-            name.textContent = client.name || 'Me';
-            makeNameEditable(name);
-        } else {
-            name.textContent = client.name || `Guest ${client.colorIndex + 1}`;
+    clients.forEach(client => {
+        if (client.clientId === clientId) {
+            // Update our own name if it's different
+            const nameElement = isHost ? document.getElementById('hostName') : 
+                                      document.querySelector('.guest-name');
+            if (nameElement && nameElement.textContent !== client.name) {
+                nameElement.textContent = client.name;
+            }
         }
         
-        name.style.color = guestColor;
-        
-        participantEl.appendChild(indicator);
-        participantEl.appendChild(name);
-        guestsContainer.appendChild(participantEl);
-        
-        // Store participant info for message coloring
-        participants.set(client.id, {
-            number: client.colorIndex + 1,
-            name: client.name,
-            color: guestColor,
-            isHost: client.isHost
-        });
-    });
-
-    // Update current client's guest number if they're a guest
-    if (!isHost) {
-        const myIndex = sortedGuests.findIndex(client => client.id === clientId);
-        if (myIndex !== -1) {
-            const client = sortedGuests[myIndex];
-            participants.set(clientId, {
-                number: client.colorIndex + 1,
+        if (!client.isHost) {
+            const guestElement = document.createElement('div');
+            guestElement.className = 'guest';
+            guestElement.innerHTML = `
+                <span class="name guest-name">${client.name}</span>
+            `;
+            
+            // Make guest name editable if it's our own name
+            if (client.clientId === clientId) {
+                const nameSpan = guestElement.querySelector('.name');
+                makeNameEditable(nameSpan, false);
+            }
+            
+            guestsContainer.appendChild(guestElement);
+            participants.set(client.clientId, {
+                element: guestElement,
                 name: client.name,
-                color: getGuestColor(client.colorIndex),
-                isHost: false
+                isHost: client.isHost
+            });
+        } else if (client.isHost) {
+            // Update host name in header if we're seeing the host
+            const hostName = document.getElementById('hostName');
+            if (hostName && client.name) {
+                hostName.textContent = client.name;
+                if (client.clientId === clientId) {
+                    makeNameEditable(hostName, true);
+                }
+            }
+            participants.set(client.clientId, {
+                element: document.querySelector('.header-main'),
+                name: client.name,
+                isHost: true
             });
         }
-    }
-    
-    // Update guest labels after participants change
-    updateGuestLabels();
+    });
 }
 
 function updateGuestLabels() {
@@ -202,54 +146,37 @@ function updateGuestLabels() {
 }
 
 // Function to make a name element editable
-function makeNameEditable(nameElement, isHost = false) {
-    nameElement.addEventListener('click', () => {
-        const currentName = nameElement.textContent;
-        nameElement.contentEditable = true;
-        nameElement.textContent = '';  // Clear text to show placeholder
-        nameElement.focus();
-        
-        const saveEdit = () => {
-            const newName = nameElement.textContent.trim();
-            if (newName && newName !== currentName) {
-                ws.send(JSON.stringify({
-                    type: 'name_change',
-                    name: newName
-                }));
-            } else if (!newName) {
-                // If empty, restore the previous name
-                nameElement.textContent = currentName;
-            }
-            nameElement.contentEditable = false;
-        };
-        
-        nameElement.addEventListener('blur', saveEdit, { once: true });
-        nameElement.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                nameElement.blur();
-            }
-        });
+function makeNameEditable(element, isHost) {
+    element.contentEditable = true;
+    element.spellcheck = false;
+    
+    element.addEventListener('focus', function() {
+        const range = document.createRange();
+        range.selectNodeContents(this);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
     });
-}
-
-// Create participant element
-function createParticipantElement(id, isGuest = true) {
-    const participant = document.createElement('div');
-    participant.className = 'participant';
-    participant.id = `participant-${id}`;
     
-    const indicator = document.createElement('span');
-    indicator.className = 'status-indicator online';
+    element.addEventListener('blur', function() {
+        if (this.textContent.trim() === '') {
+            this.textContent = isHost ? 'Host' : 'Guest';
+        }
+        // Send name change to server
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'name_change',
+                name: this.textContent.trim()
+            }));
+        }
+    });
     
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = isGuest ? `Guest ${participants.size}` : 'Me (Host)';
-    
-    participant.appendChild(indicator);
-    participant.appendChild(name);
-    
-    return participant;
+    element.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.blur();
+        }
+    });
 }
 
 // Handle received messages
@@ -312,11 +239,20 @@ function updateGuestName(guestId, newName) {
 
 // Handle name changes
 function handleNameChange(data) {
-    const participant = participants.get(data.id);
+    const { clientId: changedClientId, name, isHost } = data;
+    const participant = participants.get(changedClientId);
+    
     if (participant) {
-        participant.name = data.name;
-        updateGuestName(data.id, data.name);
-        updateParticipants(Array.from(participants.values()));
+        participant.name = name;
+        participant.element.querySelector('.name').textContent = name;
+        
+        // If this is the host, update the host name in the header
+        if (isHost) {
+            const hostName = document.getElementById('hostName');
+            if (hostName) {
+                hostName.textContent = name;
+            }
+        }
     }
 }
 

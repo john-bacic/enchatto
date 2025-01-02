@@ -8,6 +8,9 @@ if ('serviceWorker' in navigator) {
 }
 
 let ws = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 3000;
 let isHeaderExpanded = true;
 let isHost = false;
 let clientId = null;
@@ -359,21 +362,49 @@ function connectToRoom(roomId) {
     }
 
     try {
-        // Use current window location to determine WebSocket URL
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}`;
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}?room=${roomId}`;
         console.log('Connecting to WebSocket:', wsUrl);
         
         ws = new WebSocket(wsUrl);
         
+        let pingInterval;
+        let lastPongTime = Date.now();
+        
+        function startHeartbeat() {
+            pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    // Check if we haven't received a pong in too long
+                    if (Date.now() - lastPongTime > 35000) {
+                        console.log('No pong received, reconnecting...');
+                        ws.close();
+                        return;
+                    }
+                    ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 25000);
+        }
+
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
-            messageInput.focus();
+            reconnectAttempts = 0;
+            startHeartbeat();
+            
+            // Join room logic...
+            ws.send(JSON.stringify({
+                type: 'join',
+                roomId: roomId
+            }));
         };
 
         ws.onmessage = (event) => {
             console.log('Received message:', event.data);
             const data = JSON.parse(event.data);
+            
+            if (data.type === 'pong') {
+                lastPongTime = Date.now();
+                return;
+            }
             
             if (data.type === 'participants') {
                 updateParticipants(data.clients);
@@ -427,10 +458,16 @@ function connectToRoom(roomId) {
             console.log('Disconnected from chat room');
             hostIndicator.classList.remove('online');
             guestsContainer.innerHTML = '';
-            setTimeout(() => {
-                console.log('Attempting to reconnect...');
-                connectToRoom(roomId);
-            }, 2000);
+            clearInterval(pingInterval);
+            reconnectAttempts++;
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                console.log(`Reconnecting... Attempt ${reconnectAttempts}`);
+                setTimeout(connectToRoom, RECONNECT_DELAY, roomId);
+            } else {
+                console.log('Max reconnection attempts reached');
+                // Show reconnection error to user
+                displaySystemMessage('Connection lost. Please refresh the page to reconnect.');
+            }
         };
 
         ws.onerror = (error) => {

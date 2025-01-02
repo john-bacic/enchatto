@@ -9,6 +9,14 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Heartbeat interval in milliseconds (30 seconds)
+const HEARTBEAT_INTERVAL = 30000;
+const HEARTBEAT_TIMEOUT = 35000; // Give clients 5 seconds to respond
+
+function heartbeat() {
+    this.isAlive = true;
+}
+
 // Serve static files
 app.use(express.static(path.join(__dirname)));
 
@@ -60,6 +68,9 @@ function createRoom(roomId) {
 }
 
 wss.on('connection', (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+
     const url = new URL(req.url, 'http://localhost');
     const roomId = url.searchParams.get('room');
     
@@ -118,7 +129,10 @@ wss.on('connection', (ws, req) => {
         try {
             const message = JSON.parse(data);
             
-            if (message.type === 'name_change') {
+            if (message.type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong' }));
+                return;
+            } else if (message.type === 'name_change') {
                 // Update client's name in the room
                 const client = room.clients.find(c => c.clientId === clientId);
                 if (client) {
@@ -174,6 +188,25 @@ wss.on('connection', (ws, req) => {
             broadcastParticipants(roomId);
         }
     });
+});
+
+// Set up heartbeat interval
+const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+            // If client hasn't responded to previous ping, terminate connection
+            ws.terminate();
+            return;
+        }
+        
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, HEARTBEAT_INTERVAL);
+
+// Clean up interval on server close
+wss.on('close', () => {
+    clearInterval(interval);
 });
 
 // Start server

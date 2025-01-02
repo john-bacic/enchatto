@@ -516,4 +516,4 @@ document.addEventListener('DOMContentLoaded', () => {
     
     initializeRoomUrl(roomId);
     connectToRoom(roomId);
-});
+});s

@@ -24,6 +24,8 @@ let isHost = false;
 let clientId = null;
 let clientList = []; // Store the current client list
 let participants = new Map();
+let heartbeatInterval = null;
+const HEARTBEAT_INTERVAL = 15000; // 15 seconds
 
 // Get guest color by index - this is now fixed per guest
 function getGuestColor(colorIndex) {
@@ -391,6 +393,25 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+function startHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+    }
+    
+    heartbeatInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+        }
+    }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
 // Connect to WebSocket room
 function connectToRoom(roomId) {
     if (ws) {
@@ -407,6 +428,7 @@ function connectToRoom(roomId) {
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
             messageInput.focus();
+            startHeartbeat();
             
             // Start keep-alive if page is hidden
             if (!isPageVisible && !keepAliveInterval) {
@@ -420,59 +442,73 @@ function connectToRoom(roomId) {
         };
 
         ws.onmessage = (event) => {
-            console.log('Received message:', event.data);
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'participants') {
-                updateParticipants(data.clients);
-            } else if (data.type === 'message') {
-                handleReceivedMessage(data);
-            } else if (data.type === 'init') {
-                clientId = data.clientId;
-                isHost = data.isHost;
-                updateThemeColor(isHost);  // Update theme color on init
+            try {
+                const data = JSON.parse(event.data);
                 
-                // Show/hide QR code section based on role
-                if (!isHost) {
-                    headerExpanded.style.display = 'none';
-                    expandBtn.style.display = 'none';
-                    
-                    // Get guest color based on color index
-                    const myColor = getGuestColor(data.colorIndex);
-                    
-                    // Color the header and send button
-                    const header = document.querySelector('.header-main');
-                    const sendButton = document.getElementById('sendBtn');
-                    header.style.backgroundColor = myColor;
-                    header.style.color = '#ffffff';
-                    sendButton.style.backgroundColor = myColor;
-                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                    sendButton.style.border = 'none';
-                } else {
-                    // Make host name editable and set initial header state
-                    const hostName = document.getElementById('hostName');
-                    makeNameEditable(hostName, true);
-                    setHeaderExpanded(true);
-                    
-                    // Get the computed background color of the header
-                    const header = document.querySelector('.header-main');
-                    const headerColor = getComputedStyle(header).backgroundColor;
-                    
-                    // Set host send button to match header color
-                    const sendButton = document.getElementById('sendBtn');
-                    sendButton.style.backgroundColor = headerColor;
-                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                    sendButton.style.border = 'none';
+                if (data.type === 'pong') {
+                    // Heartbeat response received
+                    return;
                 }
                 
-                updateParticipants(data.clients);
-            } else if (data.type === 'name_change') {
-                handleNameChange(data);
+                switch (data.type) {
+                    case 'init':
+                        clientId = data.clientId;
+                        isHost = data.isHost;
+                        updateThemeColor(isHost);  // Update theme color on init
+                        
+                        // Show/hide QR code section based on role
+                        if (!isHost) {
+                            headerExpanded.style.display = 'none';
+                            expandBtn.style.display = 'none';
+                            
+                            // Get guest color based on color index
+                            const myColor = getGuestColor(data.colorIndex);
+                            
+                            // Color the header and send button
+                            const header = document.querySelector('.header-main');
+                            const sendButton = document.getElementById('sendBtn');
+                            header.style.backgroundColor = myColor;
+                            header.style.color = '#ffffff';
+                            sendButton.style.backgroundColor = myColor;
+                            sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                            sendButton.style.border = 'none';
+                        } else {
+                            // Make host name editable and set initial header state
+                            const hostName = document.getElementById('hostName');
+                            makeNameEditable(hostName, true);
+                            setHeaderExpanded(true);
+                            
+                            // Get the computed background color of the header
+                            const header = document.querySelector('.header-main');
+                            const headerColor = getComputedStyle(header).backgroundColor;
+                            
+                            // Set host send button to match header color
+                            const sendButton = document.getElementById('sendBtn');
+                            sendButton.style.backgroundColor = headerColor;
+                            sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                            sendButton.style.border = 'none';
+                        }
+                        
+                        updateParticipants(data.clients);
+                        break;
+                    case 'message':
+                        handleReceivedMessage(data);
+                        break;
+                    case 'participants':
+                        updateParticipants(data.clients);
+                        break;
+                    case 'name_change':
+                        handleNameChange(data);
+                        break;
+                }
+            } catch (error) {
+                console.error('Error handling message:', error);
             }
         };
 
         ws.onclose = () => {
             console.log('Disconnected from chat room');
+            stopHeartbeat();
             hostIndicator.classList.remove('online');
             guestsContainer.innerHTML = '';
             
@@ -482,7 +518,7 @@ function connectToRoom(roomId) {
                 keepAliveInterval = null;
             }
             
-            // Attempt to reconnect
+            // Attempt to reconnect after delay
             setTimeout(() => {
                 console.log('Attempting to reconnect...');
                 connectToRoom(roomId);
@@ -491,13 +527,10 @@ function connectToRoom(roomId) {
 
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
-            hostIndicator.classList.remove('online');
-            guestsContainer.innerHTML = '';
+            stopHeartbeat();
         };
     } catch (error) {
-        console.error('WebSocket connection error:', error);
-        hostIndicator.classList.remove('online');
-        guestsContainer.innerHTML = '';
+        console.error('Error connecting to WebSocket:', error);
     }
 }
 

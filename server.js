@@ -15,6 +15,22 @@ app.use(express.static(path.join(__dirname)));
 // Store active rooms and their connections
 const rooms = new Map();
 
+// Heartbeat intervals (in milliseconds)
+const HEARTBEAT_INTERVAL = 30000;
+const CLIENT_TIMEOUT = 45000;
+
+function noop() {}
+
+function heartbeat() {
+    this.isAlive = true;
+}
+
+// Initialize heartbeat for a new WebSocket connection
+function initializeHeartbeat(ws) {
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+}
+
 // Generate unique client ID
 function generateClientId() {
     return Math.random().toString(36).substring(2, 15);
@@ -59,7 +75,27 @@ function createRoom(roomId) {
     };
 }
 
+// Start heartbeat interval for all connections
+const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach(ws => {
+        if (ws.isAlive === false) {
+            console.log('Client timed out, terminating connection');
+            return ws.terminate();
+        }
+
+        ws.isAlive = false;
+        ws.ping(noop);
+    });
+}, HEARTBEAT_INTERVAL);
+
+wss.on('close', () => {
+    clearInterval(heartbeatInterval);
+});
+
 wss.on('connection', (ws, req) => {
+    // Initialize heartbeat
+    initializeHeartbeat(ws);
+    
     const url = new URL(req.url, 'http://localhost');
     const roomId = url.searchParams.get('room');
     
@@ -118,9 +154,13 @@ wss.on('connection', (ws, req) => {
         try {
             const message = JSON.parse(data);
             
-            if (message.type === 'keep_alive') {
-                // Reset client's alive status
+            if (message.type === 'keep_alive' || message.type === 'pong') {
                 ws.isAlive = true;
+                return;
+            }
+            
+            if (message.type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong' }));
                 return;
             }
             

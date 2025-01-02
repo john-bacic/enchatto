@@ -15,103 +15,130 @@ app.use(express.static(path.join(__dirname)));
 // Store active rooms and their connections
 const rooms = new Map();
 
-// Generate unique client ID
-function generateClientId() {
-    return Math.random().toString(36).substring(2, 15);
+// Store client session info
+const clientSessions = new Map();
+
+function createRoom(roomId) {
+    rooms.set(roomId, {
+        hostId: null,
+        clients: [],
+        colorIndex: 0,
+        lastActivity: Date.now()
+    });
+    return rooms.get(roomId);
 }
 
-// Get room participants list
-function getClientList(room) {
-    return room.clients.map(client => ({
-        id: client.clientId,
-        isHost: client.isHost,
-        joinTime: client.joinTime,
-        name: client.name,
-        colorIndex: client.colorIndex
-    }));
-}
-
-// Broadcast room participants
 function broadcastParticipants(roomId) {
     const room = rooms.get(roomId);
     if (!room) return;
 
     const message = JSON.stringify({
         type: 'participants',
-        clients: getClientList(room)
+        clients: room.clients
     });
 
+    // Broadcast to all clients in the room
     room.clients.forEach(client => {
-        if (client.ws.readyState === WebSocket.OPEN) {
+        if (client.ws && client.ws.readyState === WebSocket.OPEN) {
             client.ws.send(message);
         }
     });
 }
 
-// Create room if it doesn't exist
-function createRoom(roomId) {
-    return {
-        id: roomId,
-        clients: [],
-        guestColors: new Map(), // Store guest colors permanently
-        nextGuestIndex: 0, // Track the next available guest index
-        hostId: null
-    };
+function broadcastToRoom(roomId, message, excludeClientId = null) {
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    const messageStr = JSON.stringify(message);
+    room.clients.forEach(client => {
+        if (client.clientId !== excludeClientId && client.ws && client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(messageStr);
+        }
+    });
 }
 
 wss.on('connection', (ws, req) => {
     const url = new URL(req.url, 'http://localhost');
     const roomId = url.searchParams.get('room');
+    const sessionId = url.searchParams.get('sessionId');
     
-    if (!roomId) {
-        ws.close();
-        return;
-    }
-
-    let room = rooms.get(roomId);
-    if (!room) {
-        room = createRoom(roomId);
-        rooms.set(roomId, room);
+    // Create room if it doesn't exist
+    if (!rooms.has(roomId)) {
+        createRoom(roomId);
     }
     
-    const clientId = generateClientId();
-    const isHost = !room.hostId; // First client becomes host
+    const room = rooms.get(roomId);
+    let clientId;
+    let isHost = false;
 
-    // Assign a permanent color index for guests
-    let colorIndex = isHost ? -1 : room.guestColors.get(clientId);
-    if (!isHost && colorIndex === undefined) {
-        colorIndex = room.nextGuestIndex++;
-        room.guestColors.set(clientId, colorIndex);
+    // Check if this is a reconnection
+    if (sessionId && clientSessions.has(sessionId)) {
+        const session = clientSessions.get(sessionId);
+        clientId = session.clientId;
+        isHost = session.isHost;
+        
+        // Remove old websocket connection if it exists
+        const existingClient = room.clients.find(c => c.clientId === clientId);
+        if (existingClient) {
+            existingClient.ws = ws;
+        } else {
+            // Add client back to room
+            room.clients.push({
+                clientId,
+                name: session.name || `Guest ${room.clients.length + 1}`,
+                isHost,
+                joinTime: session.joinTime,
+                colorIndex: session.colorIndex,
+                ws
+            });
+        }
+    } else {
+        // Generate new client ID and session
+        clientId = Math.random().toString(36).substr(2, 9);
+        isHost = !room.hostId;
+        
+        if (isHost) {
+            room.hostId = clientId;
+        }
+
+        const session = {
+            clientId,
+            isHost,
+            joinTime: Date.now(),
+            colorIndex: room.colorIndex++,
+            roomId
+        };
+        
+        const newSessionId = Math.random().toString(36).substr(2, 9);
+        clientSessions.set(newSessionId, session);
+
+        room.clients.push({
+            clientId,
+            name: isHost ? 'Host' : `Guest ${room.clients.length + 1}`,
+            isHost,
+            joinTime: session.joinTime,
+            colorIndex: session.colorIndex,
+            ws
+        });
+
+        // Send session ID to client
+        ws.send(JSON.stringify({
+            type: 'session',
+            sessionId: newSessionId
+        }));
     }
 
-    // Add client to room
-    const clientInfo = {
-        ws,
-        clientId,
-        isHost,
-        joinTime: Date.now(),
-        name: null,
-        colorIndex // Store the color index with client info
-    };
-    room.clients.push(clientInfo);
-
-    if (isHost) {
-        room.hostId = clientId;
-    }
-
-    // Send initial state to client
+    // Send initial data to client
     ws.send(JSON.stringify({
         type: 'init',
         clientId,
         isHost,
-        colorIndex,
-        clients: getClientList(room)
+        colorIndex: room.clients.find(c => c.clientId === clientId)?.colorIndex || 0
     }));
 
-    // Broadcast updated participants list
     broadcastParticipants(roomId);
 
-    console.log(`Client ${clientId} joined room ${roomId} as ${isHost ? 'host' : 'guest'}. Total clients: ${room.clients.length}`);
+    console.log(`Client ${clientId} ${sessionId ? 'reconnected to' : 'joined'} room ${roomId} as ${isHost ? 'host' : 'guest'}. Total clients: ${room.clients.length}`);
 
     // Handle messages
     ws.on('message', (data) => {
@@ -119,59 +146,79 @@ wss.on('connection', (ws, req) => {
             const message = JSON.parse(data);
             
             if (message.type === 'name_change') {
-                // Update client's name in the room
                 const client = room.clients.find(c => c.clientId === clientId);
                 if (client) {
                     client.name = message.name;
-                    // Broadcast updated participant list
+                    // Update session name
+                    const session = Array.from(clientSessions.entries())
+                        .find(([_, s]) => s.clientId === clientId);
+                    if (session) {
+                        session[1].name = message.name;
+                    }
                     broadcastParticipants(roomId);
                 }
             } else if (message.type === 'message') {
-                // Create message object with sender info
                 const messageObj = {
                     type: 'message',
                     content: message.content,
                     senderId: clientId,
                     senderName: room.clients.find(c => c.clientId === clientId)?.name || 'Unknown',
-                    isHost: isHost,
+                    isHost,
                     timestamp: Date.now()
                 };
                 
-                // Send to all clients in the room
-                room.clients.forEach(client => {
-                    if (client.ws.readyState === WebSocket.OPEN) {
-                        client.ws.send(JSON.stringify(messageObj));
-                    }
-                });
+                broadcastToRoom(roomId, messageObj);
             }
         } catch (error) {
-            console.error('Error handling message:', error);
+            console.error('Error processing message:', error);
         }
     });
 
     // Handle client disconnect
     ws.on('close', () => {
-        const index = room.clients.findIndex(client => client.clientId === clientId);
-        if (index !== -1) {
-            room.clients.splice(index, 1);
-        }
-        console.log(`Client ${clientId} left room ${roomId}. Total clients: ${room.clients.length}`);
-        
-        // If host left and there are other clients, assign new host
-        if (isHost && room.clients.length > 0) {
-            // Find the client that joined first
-            const newHost = room.clients.sort((a, b) => a.joinTime - b.joinTime)[0];
-            newHost.isHost = true;
-            room.hostId = newHost.clientId;
+        const client = room.clients.find(c => c.clientId === clientId);
+        if (!client) return;
+
+        // Don't remove client immediately if they're the host
+        if (isHost) {
+            // Mark client as disconnected but keep in room
+            client.ws = null;
+            setTimeout(() => {
+                // Only remove if they haven't reconnected
+                if (!client.ws) {
+                    room.clients = room.clients.filter(c => c.clientId !== clientId);
+                    if (room.clients.length > 0) {
+                        // Assign new host
+                        const newHost = room.clients.sort((a, b) => a.joinTime - b.joinTime)[0];
+                        newHost.isHost = true;
+                        room.hostId = newHost.clientId;
+                        
+                        // Update session
+                        const session = Array.from(clientSessions.entries())
+                            .find(([_, s]) => s.clientId === newHost.clientId);
+                        if (session) {
+                            session[1].isHost = true;
+                        }
+                    }
+                    broadcastParticipants(roomId);
+                }
+            }, 30000); // Wait 30 seconds before removing host
+        } else {
+            // Remove non-host clients immediately
+            room.clients = room.clients.filter(c => c.clientId !== clientId);
+            broadcastParticipants(roomId);
         }
 
         // Clean up empty rooms
         if (room.clients.length === 0) {
             rooms.delete(roomId);
+            // Clean up associated sessions
+            for (const [sessionId, session] of clientSessions.entries()) {
+                if (session.roomId === roomId) {
+                    clientSessions.delete(sessionId);
+                }
+            }
             console.log(`Room ${roomId} deleted`);
-        } else {
-            // Broadcast updated participants list
-            broadcastParticipants(roomId);
         }
     });
 });

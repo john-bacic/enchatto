@@ -8,11 +8,15 @@ if ('serviceWorker' in navigator) {
 }
 
 let ws = null;
+let sessionId = localStorage.getItem('sessionId');
 let isHeaderExpanded = true;
 let isHost = false;
 let clientId = null;
 let clientList = []; // Store the current client list
 let participants = new Map();
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 2000;
 
 // Get guest color by index - this is now fixed per guest
 function getGuestColor(colorIndex) {
@@ -359,21 +363,27 @@ function connectToRoom(roomId) {
     }
 
     try {
-        // Use current window location to determine WebSocket URL
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}`;
+        const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}${sessionId ? `&sessionId=${sessionId}` : ''}`;
         console.log('Connecting to WebSocket:', wsUrl);
         
         ws = new WebSocket(wsUrl);
         
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
+            reconnectAttempts = 0;
             messageInput.focus();
         };
 
         ws.onmessage = (event) => {
             console.log('Received message:', event.data);
             const data = JSON.parse(event.data);
+            
+            if (data.type === 'session') {
+                sessionId = data.sessionId;
+                localStorage.setItem('sessionId', sessionId);
+                return;
+            }
             
             if (data.type === 'participants') {
                 updateParticipants(data.clients);
@@ -384,34 +394,29 @@ function connectToRoom(roomId) {
                 isHost = data.isHost;
                 updateThemeColor(isHost);  // Update theme color on init
                 
-                // Show/hide QR code section based on role
                 if (!isHost) {
                     headerExpanded.style.display = 'none';
                     expandBtn.style.display = 'none';
                     
-                    // Get guest color based on color index
                     const myColor = getGuestColor(data.colorIndex);
                     
-                    // Color the header and send button
                     const header = document.querySelector('.header-main');
                     const sendButton = document.getElementById('sendBtn');
+                    
                     header.style.backgroundColor = myColor;
                     header.style.color = '#ffffff';
                     sendButton.style.backgroundColor = myColor;
                     sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
                     sendButton.style.border = 'none';
                 } else {
-                    // Make host name editable and set initial header state
                     const hostName = document.getElementById('hostName');
                     makeNameEditable(hostName, true);
                     setHeaderExpanded(true);
                     
-                    // Get the computed background color of the header
                     const header = document.querySelector('.header-main');
                     const headerColor = getComputedStyle(header).backgroundColor;
-                    
-                    // Set host send button to match header color
                     const sendButton = document.getElementById('sendBtn');
+                    
                     sendButton.style.backgroundColor = headerColor;
                     sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
                     sendButton.style.border = 'none';
@@ -427,10 +432,18 @@ function connectToRoom(roomId) {
             console.log('Disconnected from chat room');
             hostIndicator.classList.remove('online');
             guestsContainer.innerHTML = '';
-            setTimeout(() => {
-                console.log('Attempting to reconnect...');
-                connectToRoom(roomId);
-            }, 2000);
+            
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                console.log(`Reconnecting... Attempt ${reconnectAttempts}`);
+                setTimeout(() => connectToRoom(roomId), RECONNECT_DELAY);
+            } else {
+                console.log('Max reconnection attempts reached');
+                displaySystemMessage('Connection lost. Please refresh the page to reconnect.');
+                // Clear session on max retries
+                localStorage.removeItem('sessionId');
+                sessionId = null;
+            }
         };
 
         ws.onerror = (error) => {

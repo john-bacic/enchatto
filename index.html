@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1A1B25">
+    <title>enchatto</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode/html5-qrcode.min.js"></script>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="header-main">
+                <h1>enチャット</h1>
+                <button id="expandBtn">▼</button>
+            </div>
+            <div class="header-expanded">
+                <div id="qrcode"></div>
+                <div class="url-section">
+                    <input type="text" id="room-url" readonly>
+                    <button id="copy-url">Copy URL</button>
+                </div>
+            </div>
+
+
+        
+
+
+        </div>
+
+        <div class="participants-bar">
+            <div class="guests">
+                <!-- Guests will be added here dynamically -->
+            </div>
+            <div class="host">
+                <div class="participant">
+                    <span class="name" id="hostName">Host</span>
+                    <span class="status-indicator"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-content">
+            <div id="chat-screen" class="screen">
+                <div id="messages" class="messages"></div>
+                <div class="input-area">
+                    <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+                    <button id="sendBtn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

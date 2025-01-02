@@ -15,30 +15,12 @@ app.use(express.static(path.join(__dirname)));
 // Store active rooms and their connections
 const rooms = new Map();
 
-// Heartbeat intervals (in milliseconds)
-const HEARTBEAT_INTERVAL = 45000; // 45 seconds
-const CLIENT_TIMEOUT = 90000;    // 90 seconds - doubled for mobile
-
-function noop() {}
-
-function heartbeat() {
-    this.isAlive = true;
-    this.lastPing = Date.now();
-}
-
-// Initialize heartbeat for a new WebSocket connection
-function initializeHeartbeat(ws) {
-    ws.isAlive = true;
-    ws.lastPing = Date.now();
-    ws.on('pong', heartbeat);
-}
-
 // Generate unique client ID
 function generateClientId() {
     return Math.random().toString(36).substring(2, 15);
 }
 
-// Get room participants list
+// Get client list for a room
 function getClientList(room) {
     return room.clients.map(client => ({
         id: client.clientId,
@@ -71,40 +53,14 @@ function createRoom(roomId) {
     return {
         id: roomId,
         clients: [],
-        guestColors: new Map(), // Store guest colors permanently
-        nextGuestIndex: 0, // Track the next available guest index
-        hostId: null
+        guestColors: new Map(),
+        nextGuestIndex: 0,
+        hostId: null,
+        disconnectedClients: new Map() // Store info about disconnected clients
     };
 }
 
-// Start heartbeat interval for all connections
-const heartbeatInterval = setInterval(() => {
-    wss.clients.forEach(ws => {
-        const timeSinceLastPing = Date.now() - ws.lastPing;
-        
-        // Only terminate if significantly over timeout
-        if (!ws.isAlive && timeSinceLastPing > CLIENT_TIMEOUT) {
-            console.log('Client timed out after extended period, terminating connection');
-            return ws.terminate();
-        }
-
-        ws.isAlive = false;
-        try {
-            ws.ping(noop);
-        } catch (error) {
-            console.error('Error sending ping:', error);
-        }
-    });
-}, HEARTBEAT_INTERVAL);
-
-wss.on('close', () => {
-    clearInterval(heartbeatInterval);
-});
-
 wss.on('connection', (ws, req) => {
-    // Initialize heartbeat
-    initializeHeartbeat(ws);
-    
     const url = new URL(req.url, 'http://localhost');
     const roomId = url.searchParams.get('room');
     
@@ -122,11 +78,21 @@ wss.on('connection', (ws, req) => {
     const clientId = generateClientId();
     const isHost = !room.hostId; // First client becomes host
 
-    // Assign a permanent color index for guests
-    let colorIndex = isHost ? -1 : room.guestColors.get(clientId);
-    if (!isHost && colorIndex === undefined) {
-        colorIndex = room.nextGuestIndex++;
-        room.guestColors.set(clientId, colorIndex);
+    // Check if there's a disconnected client trying to reconnect
+    let colorIndex = -1;
+    let existingClient = room.disconnectedClients.get(clientId);
+    
+    if (existingClient) {
+        // Reuse the existing client's information
+        colorIndex = existingClient.colorIndex;
+        room.disconnectedClients.delete(clientId);
+    } else if (!isHost) {
+        // Assign new color index for new guests
+        colorIndex = room.guestColors.get(clientId);
+        if (colorIndex === undefined) {
+            colorIndex = room.nextGuestIndex++;
+            room.guestColors.set(clientId, colorIndex);
+        }
     }
 
     // Add client to room
@@ -135,8 +101,8 @@ wss.on('connection', (ws, req) => {
         clientId,
         isHost,
         joinTime: Date.now(),
-        name: null,
-        colorIndex // Store the color index with client info
+        name: existingClient?.name || null,
+        colorIndex
     };
     room.clients.push(clientInfo);
 
@@ -162,16 +128,6 @@ wss.on('connection', (ws, req) => {
     ws.on('message', (data) => {
         try {
             const message = JSON.parse(data);
-            
-            if (message.type === 'keep_alive' || message.type === 'pong') {
-                ws.isAlive = true;
-                return;
-            }
-            
-            if (message.type === 'ping') {
-                ws.send(JSON.stringify({ type: 'pong' }));
-                return;
-            }
             
             if (message.type === 'name_change') {
                 // Update client's name in the room
@@ -208,8 +164,17 @@ wss.on('connection', (ws, req) => {
     ws.on('close', () => {
         const index = room.clients.findIndex(client => client.clientId === clientId);
         if (index !== -1) {
+            const disconnectedClient = room.clients[index];
+            // Store disconnected client info for potential reconnection
+            room.disconnectedClients.set(clientId, {
+                colorIndex: disconnectedClient.colorIndex,
+                name: disconnectedClient.name,
+                isHost: disconnectedClient.isHost
+            });
+            
             room.clients.splice(index, 1);
         }
+        
         console.log(`Client ${clientId} left room ${roomId}. Total clients: ${room.clients.length}`);
         
         // If host left and there are other clients, assign new host
@@ -220,10 +185,14 @@ wss.on('connection', (ws, req) => {
             room.hostId = newHost.clientId;
         }
 
-        // Clean up empty rooms
+        // Clean up empty rooms after a delay to allow for reconnection
         if (room.clients.length === 0) {
-            rooms.delete(roomId);
-            console.log(`Room ${roomId} deleted`);
+            setTimeout(() => {
+                if (rooms.has(roomId) && rooms.get(roomId).clients.length === 0) {
+                    rooms.delete(roomId);
+                    console.log(`Room ${roomId} deleted after timeout`);
+                }
+            }, 300000); // 5 minutes timeout
         } else {
             // Broadcast updated participants list
             broadcastParticipants(roomId);
@@ -231,36 +200,37 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-// Add route for keep-alive requests
-app.get('/keep-alive', (req, res) => {
-    res.send('alive');
-});
-
 // Start server
-const PORT = 3005;
+const PORT = process.env.PORT || 3005;
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     
-    // Get local IP address
-    const interfaces = os.networkInterfaces();
-    let localIP;
-    
-    Object.keys(interfaces).forEach((interfaceName) => {
-        interfaces[interfaceName].forEach((interface) => {
-            if (interface.family === 'IPv4' && !interface.internal) {
-                localIP = interface.address;
-            }
-        });
-    });
-    
-    const localURL = `http://localhost:${PORT}`;
-    const networkURL = localIP ? `http://${localIP}:${PORT}` : null;
+    // Get deployment URL
+    const isProduction = process.env.NODE_ENV === 'production';
+    const deploymentURL = isProduction ? 'https://enchatto.onrender.com' : `http://localhost:${PORT}`;
     
     console.log('\nAccess URLs:');
-    console.log(`Local: ${localURL}`);
-    if (networkURL) {
-        console.log(`Network: ${networkURL}`);
-        console.log('\nQR Code for Network URL:');
-        qrcode.generate(networkURL, { small: true });
+    console.log(`Local: ${deploymentURL}`);
+    
+    // Only show network URL and QR code in development
+    if (!isProduction) {
+        // Get local IP address
+        const interfaces = os.networkInterfaces();
+        let localIP;
+        
+        Object.keys(interfaces).forEach((interfaceName) => {
+            interfaces[interfaceName].forEach((interface) => {
+                if (interface.family === 'IPv4' && !interface.internal) {
+                    localIP = interface.address;
+                }
+            });
+        });
+        
+        const networkURL = localIP ? `http://${localIP}:${PORT}` : null;
+        if (networkURL) {
+            console.log(`Network: ${networkURL}`);
+            console.log('\nQR Code for Network URL:');
+            qrcode.generate(networkURL, { small: false });
+        }
     }
 });

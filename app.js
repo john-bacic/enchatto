@@ -7,33 +7,17 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// Register service worker for background functionality
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-        .then(registration => {
-            console.log('ServiceWorker registration successful');
-        })
-        .catch(err => {
-            console.error('ServiceWorker registration failed:', err);
-        });
-}
-
 let ws = null;
-let heartbeatInterval = null;
-let reconnectTimeout = null;
-const HEARTBEAT_INTERVAL = 30000; // 30 seconds
-const RECONNECT_DELAY = 2000;    // 2 seconds
-const MAX_RECONNECT_ATTEMPTS = 5;
-let reconnectAttempts = 0;
 let isHeaderExpanded = true;
 let isHost = false;
 let clientId = null;
+let currentRoomId = null;
 let clientList = []; // Store the current client list
 let participants = new Map();
-const KEEP_ALIVE_INTERVAL = 20000; // 20 seconds
-let keepAliveInterval;
-let isPageVisible = true;
-let currentRoomId;
+let isReconnecting = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 2000;
 
 // Get guest color by index - this is now fixed per guest
 function getGuestColor(colorIndex) {
@@ -373,82 +357,37 @@ function updateThemeColor(isHost) {
     document.querySelector('meta[name="theme-color"]').setAttribute('content', themeColor);
 }
 
-// WebSocket connection handling
-function startHeartbeat() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-    }
-    
-    heartbeatInterval = setInterval(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            try {
-                ws.send(JSON.stringify({ type: 'ping' }));
-            } catch (error) {
-                console.error('Error sending ping:', error);
-                // Don't immediately close - wait for next ping cycle
-            }
-        }
-    }, HEARTBEAT_INTERVAL);
-}
-
-function stopHeartbeat() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-    }
-}
-
-function clearReconnectTimeout() {
-    if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
-    }
-}
-
-// Handle visibility change
+// Handle page visibility changes
 document.addEventListener('visibilitychange', () => {
-    isPageVisible = document.visibilityState === 'visible';
-    console.log('Page visibility changed:', isPageVisible ? 'visible' : 'hidden');
+    const isVisible = document.visibilityState === 'visible';
+    console.log('Page visibility changed:', isVisible ? 'visible' : 'hidden');
     
-    if (!isPageVisible) {
-        // Keep connection alive in background
-        if (!keepAliveInterval) {
-            keepAliveInterval = setInterval(() => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    try {
-                        ws.send(JSON.stringify({ type: 'keep_alive' }));
-                        fetch('/keep-alive'); // Keep service worker alive
-                    } catch (error) {
-                        console.error('Error sending keep-alive:', error);
-                    }
-                }
-            }, KEEP_ALIVE_INTERVAL);
-        }
-    } else {
-        // Page is visible again
-        if (keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-            keepAliveInterval = null;
-        }
-        
-        // Check connection and reconnect if needed
-        if (ws && ws.readyState !== WebSocket.OPEN) {
-            reconnectAttempts = 0; // Reset reconnect attempts
+    if (isVisible && currentRoomId && !isReconnecting) {
+        console.log('Page visible, checking connection status...');
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            console.log('Connection lost, attempting to reconnect...');
+            reconnectAttempts = 0;
             connectToRoom(currentRoomId);
         }
     }
 });
 
+// Connect to WebSocket room
 function connectToRoom(roomId) {
-    currentRoomId = roomId; // Store current room ID for reconnection
+    if (!roomId) {
+        console.error('No room ID provided');
+        return;
+    }
     
+    currentRoomId = roomId; // Store current room ID
+    isReconnecting = true;
+
     if (ws) {
         ws.close();
     }
 
-    clearReconnectTimeout(); // Clear any pending reconnect
-    
     try {
+        // Use current window location to determine WebSocket URL
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}`;
         console.log('Connecting to WebSocket:', wsUrl);
@@ -457,78 +396,94 @@ function connectToRoom(roomId) {
         
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
-            reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+            isReconnecting = false;
+            reconnectAttempts = 0;
             messageInput.focus();
-            startHeartbeat();
+        };
+
+        ws.onmessage = (event) => {
+            console.log('Received message:', event.data);
+            const data = JSON.parse(event.data);
             
-            // Start keep-alive if page is hidden
-            if (!isPageVisible && !keepAliveInterval) {
-                keepAliveInterval = setInterval(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        try {
-                            ws.send(JSON.stringify({ type: 'keep_alive' }));
-                            fetch('/keep-alive');
-                        } catch (error) {
-                            console.error('Error sending keep-alive:', error);
-                        }
-                    }
-                }, KEEP_ALIVE_INTERVAL);
+            if (data.type === 'participants') {
+                updateParticipants(data.clients);
+            } else if (data.type === 'message') {
+                handleReceivedMessage(data);
+            } else if (data.type === 'init') {
+                clientId = data.clientId;
+                isHost = data.isHost;
+                updateThemeColor(isHost);  // Update theme color on init
+                
+                // Show/hide QR code section based on role
+                if (!isHost) {
+                    headerExpanded.style.display = 'none';
+                    expandBtn.style.display = 'none';
+                    
+                    // Get guest color based on color index
+                    const myColor = getGuestColor(data.colorIndex);
+                    
+                    // Color the header and send button
+                    const header = document.querySelector('.header-main');
+                    const sendButton = document.getElementById('sendBtn');
+                    header.style.backgroundColor = myColor;
+                    header.style.color = '#ffffff';
+                    sendButton.style.backgroundColor = myColor;
+                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                    sendButton.style.border = 'none';
+                } else {
+                    // Make host name editable and set initial header state
+                    const hostName = document.getElementById('hostName');
+                    makeNameEditable(hostName, true);
+                    setHeaderExpanded(true);
+                    
+                    // Get the computed background color of the header
+                    const header = document.querySelector('.header-main');
+                    const headerColor = getComputedStyle(header).backgroundColor;
+                    
+                    // Set host send button to match header color
+                    const sendButton = document.getElementById('sendBtn');
+                    sendButton.style.backgroundColor = headerColor;
+                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                    sendButton.style.border = 'none';
+                }
+                
+                updateParticipants(data.clients);
+            } else if (data.type === 'name_change') {
+                handleNameChange(data);
             }
         };
 
-        ws.onclose = (event) => {
-            console.log('WebSocket closed:', event.code, event.reason);
-            stopHeartbeat();
+        ws.onclose = () => {
+            console.log('Disconnected from chat room');
+            hostIndicator.classList.remove('online');
+            guestsContainer.innerHTML = '';
             
-            // Clear intervals
-            if (keepAliveInterval) {
-                clearInterval(keepAliveInterval);
-                keepAliveInterval = null;
-            }
-            
-            // Only attempt reconnect if not a clean close and under max attempts
-            if (!event.wasClean && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            if (document.visibilityState === 'visible' && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                 reconnectAttempts++;
                 const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1); // Exponential backoff
                 console.log(`Attempting reconnect ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
                 
-                reconnectTimeout = setTimeout(() => {
-                    connectToRoom(currentRoomId);
+                setTimeout(() => {
+                    if (currentRoomId) {
+                        connectToRoom(currentRoomId);
+                    }
                 }, delay);
             } else {
-                console.log('Connection closed permanently');
-                hostIndicator.classList.remove('online');
-                guestsContainer.innerHTML = '';
+                isReconnecting = false;
             }
         };
 
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
-            // Don't close connection here - let the heartbeat mechanism handle it
+            hostIndicator.classList.remove('online');
+            guestsContainer.innerHTML = '';
         };
-        
     } catch (error) {
-        console.error('Error connecting to WebSocket:', error);
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            reconnectAttempts++;
-            const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1);
-            console.log(`Attempting reconnect ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-            
-            reconnectTimeout = setTimeout(() => {
-                connectToRoom(currentRoomId);
-            }, delay);
-        }
+        console.error('WebSocket connection error:', error);
+        hostIndicator.classList.remove('online');
+        guestsContainer.innerHTML = '';
     }
 }
-
-// Clean up on page unload
-window.addEventListener('beforeunload', () => {
-    stopHeartbeat();
-    clearReconnectTimeout();
-    if (ws) {
-        ws.close();
-    }
-});
 
 // Generate random room ID
 function generateRoomId() {
@@ -583,6 +538,13 @@ function initializeRoomUrl(roomId) {
         e.target.select();
     });
 }
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    if (ws) {
+        ws.close();
+    }
+});
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {

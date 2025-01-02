@@ -176,16 +176,17 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-const PORT = process.env.PORT || 8080;
+// Start server
+const PORT = 3005;
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     
     // Get local IP address
-    const networkInterfaces = os.networkInterfaces();
+    const interfaces = os.networkInterfaces();
     let localIP;
     
-    Object.keys(networkInterfaces).forEach((interfaceName) => {
-        networkInterfaces[interfaceName].forEach((interface) => {
+    Object.keys(interfaces).forEach((interfaceName) => {
+        interfaces[interfaceName].forEach((interface) => {
             if (interface.family === 'IPv4' && !interface.internal) {
                 localIP = interface.address;
             }

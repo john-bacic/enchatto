@@ -7,24 +7,7 @@ const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ 
-    server,
-    clientTracking: true,
-    // Increase timeout values
-    pingTimeout: 60000,
-    pingInterval: 25000
-});
-
-// Heartbeat interval in milliseconds (25 seconds)
-const HEARTBEAT_INTERVAL = 25000;
-const HEARTBEAT_TIMEOUT = 60000; // Give clients more time to respond
-
-function heartbeat() {
-    this.isAlive = true;
-    this.lastPing = Date.now();
-}
-
-function noop() {}
+const wss = new WebSocket.Server({ server });
 
 // Serve static files
 app.use(express.static(path.join(__dirname)));
@@ -77,10 +60,6 @@ function createRoom(roomId) {
 }
 
 wss.on('connection', (ws, req) => {
-    ws.isAlive = true;
-    ws.lastPing = Date.now();
-    ws.on('pong', heartbeat);
-
     const url = new URL(req.url, 'http://localhost');
     const roomId = url.searchParams.get('room');
     
@@ -134,29 +113,24 @@ wss.on('connection', (ws, req) => {
 
     console.log(`Client ${clientId} joined room ${roomId} as ${isHost ? 'host' : 'guest'}. Total clients: ${room.clients.length}`);
 
-    // Handle client messages
-    ws.on('message', (message) => {
+    // Handle messages
+    ws.on('message', (data) => {
         try {
-            const data = JSON.parse(message);
+            const message = JSON.parse(data);
             
-            if (data.type === 'ping') {
-                ws.send(JSON.stringify({ type: 'pong' }));
-                ws.isAlive = true;
-                ws.lastPing = Date.now();
-                return;
-            } else if (data.type === 'name_change') {
+            if (message.type === 'name_change') {
                 // Update client's name in the room
                 const client = room.clients.find(c => c.clientId === clientId);
                 if (client) {
-                    client.name = data.name;
+                    client.name = message.name;
                     // Broadcast updated participant list
                     broadcastParticipants(roomId);
                 }
-            } else if (data.type === 'message') {
+            } else if (message.type === 'message') {
                 // Create message object with sender info
                 const messageObj = {
                     type: 'message',
-                    content: data.content,
+                    content: message.content,
                     senderId: clientId,
                     senderName: room.clients.find(c => c.clientId === clientId)?.name || 'Unknown',
                     isHost: isHost,
@@ -177,53 +151,29 @@ wss.on('connection', (ws, req) => {
 
     // Handle client disconnect
     ws.on('close', () => {
-        try {
-            const room = rooms.get(roomId);
-            if (room) {
-                // Remove client from room
-                room.clients = room.clients.filter(client => client.clientId !== clientId);
-                
-                // Broadcast updated participant list
-                broadcastParticipants(roomId);
-                
-                // If room is empty, delete it after a delay
-                if (room.clients.length === 0) {
-                    setTimeout(() => {
-                        if (rooms.has(roomId) && rooms.get(roomId).clients.length === 0) {
-                            rooms.delete(roomId);
-                            console.log(`Room ${roomId} deleted`);
-                        }
-                    }, 60000); // Wait 60 seconds before deleting empty room
-                }
-                
-                console.log(`Client ${clientId} left room ${roomId}. Total clients: ${room.clients.length}`);
-            }
-        } catch (error) {
-            console.error('Error handling client disconnect:', error);
+        const index = room.clients.findIndex(client => client.clientId === clientId);
+        if (index !== -1) {
+            room.clients.splice(index, 1);
+        }
+        console.log(`Client ${clientId} left room ${roomId}. Total clients: ${room.clients.length}`);
+        
+        // If host left and there are other clients, assign new host
+        if (isHost && room.clients.length > 0) {
+            // Find the client that joined first
+            const newHost = room.clients.sort((a, b) => a.joinTime - b.joinTime)[0];
+            newHost.isHost = true;
+            room.hostId = newHost.clientId;
+        }
+
+        // Clean up empty rooms
+        if (room.clients.length === 0) {
+            rooms.delete(roomId);
+            console.log(`Room ${roomId} deleted`);
+        } else {
+            // Broadcast updated participants list
+            broadcastParticipants(roomId);
         }
     });
-});
-
-// Set up heartbeat interval with error handling
-const interval = setInterval(() => {
-    wss.clients.forEach((ws) => {
-        try {
-            if (!ws.isAlive || (Date.now() - ws.lastPing > HEARTBEAT_TIMEOUT)) {
-                console.log('Client timeout, terminating connection');
-                return ws.terminate();
-            }
-
-            ws.isAlive = false;
-            ws.ping(noop);
-        } catch (error) {
-            console.error('Error in heartbeat check:', error);
-        }
-    });
-}, HEARTBEAT_INTERVAL);
-
-// Clean up interval on server close
-wss.on('close', () => {
-    clearInterval(interval);
 });
 
 // Start server

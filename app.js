@@ -8,17 +8,11 @@ if ('serviceWorker' in navigator) {
 }
 
 let ws = null;
-let reconnectAttempts = 0;
-let isReconnecting = false;
-const MAX_RECONNECT_ATTEMPTS = 10;
-const RECONNECT_DELAY = 2000;
-const MAX_RECONNECT_DELAY = 30000;
-let pingInterval;
-let lastPongTime;
-
-function getExponentialBackoff(attempt) {
-    return Math.min(RECONNECT_DELAY * Math.pow(2, attempt), MAX_RECONNECT_DELAY);
-}
+let isHeaderExpanded = true;
+let isHost = false;
+let clientId = null;
+let clientList = []; // Store the current client list
+let participants = new Map();
 
 // Get guest color by index - this is now fixed per guest
 function getGuestColor(colorIndex) {
@@ -358,151 +352,96 @@ function updateThemeColor(isHost) {
     document.querySelector('meta[name="theme-color"]').setAttribute('content', themeColor);
 }
 
+// Connect to WebSocket room
 function connectToRoom(roomId) {
-    if (isReconnecting) {
-        console.log('Already attempting to reconnect...');
-        return;
+    if (ws) {
+        ws.close();
     }
 
     try {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}?room=${roomId}`;
+        // Use current window location to determine WebSocket URL
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}`;
         console.log('Connecting to WebSocket:', wsUrl);
         
-        if (ws) {
-            ws.close();
-        }
-
         ws = new WebSocket(wsUrl);
-        lastPongTime = Date.now();
         
-        function startHeartbeat() {
-            if (pingInterval) {
-                clearInterval(pingInterval);
-            }
-            
-            pingInterval = setInterval(() => {
-                try {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        // Check if we haven't received a pong in too long
-                        if (Date.now() - lastPongTime > 45000) { 
-                            console.log('No pong received, reconnecting...');
-                            ws.close();
-                            return;
-                        }
-                        ws.send(JSON.stringify({ type: 'ping' }));
-                    }
-                } catch (error) {
-                    console.error('Error in heartbeat:', error);
-                }
-            }, 20000); 
-        }
-
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
-            isReconnecting = false;
-            reconnectAttempts = 0;
-            startHeartbeat();
-            
-            // Join room logic...
-            ws.send(JSON.stringify({
-                type: 'join',
-                roomId: roomId
-            }));
+            messageInput.focus();
         };
 
         ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
+            console.log('Received message:', event.data);
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'participants') {
+                updateParticipants(data.clients);
+            } else if (data.type === 'message') {
+                handleReceivedMessage(data);
+            } else if (data.type === 'init') {
+                clientId = data.clientId;
+                isHost = data.isHost;
+                updateThemeColor(isHost);  // Update theme color on init
                 
-                if (data.type === 'pong') {
-                    lastPongTime = Date.now();
-                    return;
+                // Show/hide QR code section based on role
+                if (!isHost) {
+                    headerExpanded.style.display = 'none';
+                    expandBtn.style.display = 'none';
+                    
+                    // Get guest color based on color index
+                    const myColor = getGuestColor(data.colorIndex);
+                    
+                    // Color the header and send button
+                    const header = document.querySelector('.header-main');
+                    const sendButton = document.getElementById('sendBtn');
+                    header.style.backgroundColor = myColor;
+                    header.style.color = '#ffffff';
+                    sendButton.style.backgroundColor = myColor;
+                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                    sendButton.style.border = 'none';
+                } else {
+                    // Make host name editable and set initial header state
+                    const hostName = document.getElementById('hostName');
+                    makeNameEditable(hostName, true);
+                    setHeaderExpanded(true);
+                    
+                    // Get the computed background color of the header
+                    const header = document.querySelector('.header-main');
+                    const headerColor = getComputedStyle(header).backgroundColor;
+                    
+                    // Set host send button to match header color
+                    const sendButton = document.getElementById('sendBtn');
+                    sendButton.style.backgroundColor = headerColor;
+                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                    sendButton.style.border = 'none';
                 }
                 
-                if (data.type === 'participants') {
-                    updateParticipants(data.clients);
-                } else if (data.type === 'message') {
-                    handleReceivedMessage(data);
-                } else if (data.type === 'init') {
-                    clientId = data.clientId;
-                    isHost = data.isHost;
-                    updateThemeColor(isHost);  
-                    
-                    // Show/hide QR code section based on role
-                    if (!isHost) {
-                        headerExpanded.style.display = 'none';
-                        expandBtn.style.display = 'none';
-                        
-                        // Get guest color based on color index
-                        const myColor = getGuestColor(data.colorIndex);
-                        
-                        // Color the header and send button
-                        const header = document.querySelector('.header-main');
-                        const sendButton = document.getElementById('sendBtn');
-                        header.style.backgroundColor = myColor;
-                        header.style.color = '#ffffff';
-                        sendButton.style.backgroundColor = myColor;
-                        sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                        sendButton.style.border = 'none';
-                    } else {
-                        // Make host name editable and set initial header state
-                        const hostName = document.getElementById('hostName');
-                        makeNameEditable(hostName, true);
-                        setHeaderExpanded(true);
-                        
-                        // Get the computed background color of the header
-                        const header = document.querySelector('.header-main');
-                        const headerColor = getComputedStyle(header).backgroundColor;
-                        
-                        // Set host send button to match header color
-                        const sendButton = document.getElementById('sendBtn');
-                        sendButton.style.backgroundColor = headerColor;
-                        sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                        sendButton.style.border = 'none';
-                    }
-                    
-                    updateParticipants(data.clients);
-                } else if (data.type === 'name_change') {
-                    handleNameChange(data);
-                }
-            } catch (error) {
-                console.error('Error processing message:', error);
+                updateParticipants(data.clients);
+            } else if (data.type === 'name_change') {
+                handleNameChange(data);
             }
         };
 
-        ws.onclose = (event) => {
-            console.log('WebSocket closed with code:', event.code);
-            clearInterval(pingInterval);
-            
-            if (!isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                isReconnecting = true;
-                reconnectAttempts++;
-                const delay = getExponentialBackoff(reconnectAttempts);
-                console.log(`Reconnecting... Attempt ${reconnectAttempts} in ${delay}ms`);
-                
-                setTimeout(() => {
-                    isReconnecting = false;
-                    connectToRoom(roomId);
-                }, delay);
-            } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                console.log('Max reconnection attempts reached');
-                displaySystemMessage('Connection lost. Please refresh the page to reconnect.');
-            }
+        ws.onclose = () => {
+            console.log('Disconnected from chat room');
+            hostIndicator.classList.remove('online');
+            guestsContainer.innerHTML = '';
+            setTimeout(() => {
+                console.log('Attempting to reconnect...');
+                connectToRoom(roomId);
+            }, 2000);
         };
 
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
+            hostIndicator.classList.remove('online');
+            guestsContainer.innerHTML = '';
         };
-        
     } catch (error) {
-        console.error('Error connecting to WebSocket:', error);
-        if (!isReconnecting) {
-            setTimeout(() => connectToRoom(roomId), RECONNECT_DELAY);
-        }
+        console.error('WebSocket connection error:', error);
+        hostIndicator.classList.remove('online');
+        guestsContainer.innerHTML = '';
     }
 }
 

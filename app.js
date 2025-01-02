@@ -44,8 +44,8 @@ const messagesContainer = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const copyUrlBtn = document.getElementById('copy-url');
-const guestsContainer = document.querySelector('.guests');
-const hostIndicator = document.querySelector('.host .status-indicator');
+const guestsContainer = document.getElementById('guests');
+const hostIndicator = document.getElementById('hostIndicator');
 const hostName = document.getElementById('hostName');
 
 // Function to toggle header expansion
@@ -78,14 +78,19 @@ messageInput.addEventListener('focus', () => {
 
 // Update participants list
 function updateParticipants(clients) {
-    const guestsContainer = document.getElementById('guests');
+    // Ensure the guests container exists
+    if (!guestsContainer) {
+        console.error('Guests container not found');
+        return;
+    }
+
     guestsContainer.innerHTML = '';
     participants.clear();
     
     clients.forEach(client => {
         if (client.clientId === clientId) {
             // Update our own name if it's different
-            const nameElement = isHost ? document.getElementById('hostName') : 
+            const nameElement = isHost ? hostName : 
                                       document.querySelector('.guest-name');
             if (nameElement && nameElement.textContent !== client.name) {
                 nameElement.textContent = client.name;
@@ -111,10 +116,9 @@ function updateParticipants(clients) {
                 name: client.name,
                 isHost: client.isHost
             });
-        } else if (client.isHost) {
+        } else if (client.isHost && hostName) {
             // Update host name in header if we're seeing the host
-            const hostName = document.getElementById('hostName');
-            if (hostName && client.name) {
+            if (client.name) {
                 hostName.textContent = client.name;
                 if (client.clientId === clientId) {
                     makeNameEditable(hostName, true);
@@ -146,7 +150,9 @@ function updateGuestLabels() {
 }
 
 // Function to make a name element editable
-function makeNameEditable(element, isHost) {
+function makeNameEditable(element, isHostUser) {
+    if (!element) return;
+    
     element.contentEditable = true;
     element.spellcheck = false;
     
@@ -160,7 +166,7 @@ function makeNameEditable(element, isHost) {
     
     element.addEventListener('blur', function() {
         if (this.textContent.trim() === '') {
-            this.textContent = isHost ? 'Host' : 'Guest';
+            this.textContent = isHostUser ? 'Host' : 'Guest';
         }
         // Send name change to server
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -239,19 +245,19 @@ function updateGuestName(guestId, newName) {
 
 // Handle name changes
 function handleNameChange(data) {
-    const { clientId: changedClientId, name, isHost } = data;
+    const { clientId: changedClientId, name, isHost: isHostUser } = data;
     const participant = participants.get(changedClientId);
     
     if (participant) {
         participant.name = name;
-        participant.element.querySelector('.name').textContent = name;
+        const nameElement = participant.element.querySelector('.name');
+        if (nameElement) {
+            nameElement.textContent = name;
+        }
         
         // If this is the host, update the host name in the header
-        if (isHost) {
-            const hostName = document.getElementById('hostName');
-            if (hostName) {
-                hostName.textContent = name;
-            }
+        if (isHostUser && hostName) {
+            hostName.textContent = name;
         }
     }
 }
@@ -308,7 +314,7 @@ function connectToRoom(roomId) {
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
             reconnectAttempts = 0;
-            messageInput.focus();
+            if (messageInput) messageInput.focus();
         };
 
         ws.onmessage = (event) => {
@@ -330,7 +336,7 @@ function connectToRoom(roomId) {
                 isHost = data.isHost;
                 updateThemeColor(isHost);  // Update theme color on init
                 
-                if (!isHost) {
+                if (!isHost && headerExpanded && expandBtn) {
                     headerExpanded.style.display = 'none';
                     expandBtn.style.display = 'none';
                     
@@ -339,23 +345,26 @@ function connectToRoom(roomId) {
                     const header = document.querySelector('.header-main');
                     const sendButton = document.getElementById('sendBtn');
                     
-                    header.style.backgroundColor = myColor;
-                    header.style.color = '#ffffff';
-                    sendButton.style.backgroundColor = myColor;
-                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                    sendButton.style.border = 'none';
-                } else {
-                    const hostName = document.getElementById('hostName');
+                    if (header && sendButton) {
+                        header.style.backgroundColor = myColor;
+                        header.style.color = '#ffffff';
+                        sendButton.style.backgroundColor = myColor;
+                        sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                        sendButton.style.border = 'none';
+                    }
+                } else if (isHost && hostName) {
                     makeNameEditable(hostName, true);
                     setHeaderExpanded(true);
                     
                     const header = document.querySelector('.header-main');
-                    const headerColor = getComputedStyle(header).backgroundColor;
                     const sendButton = document.getElementById('sendBtn');
                     
-                    sendButton.style.backgroundColor = headerColor;
-                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                    sendButton.style.border = 'none';
+                    if (header && sendButton) {
+                        const headerColor = getComputedStyle(header).backgroundColor;
+                        sendButton.style.backgroundColor = headerColor;
+                        sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                        sendButton.style.border = 'none';
+                    }
                 }
                 
                 updateParticipants(data.clients);
@@ -366,8 +375,8 @@ function connectToRoom(roomId) {
 
         ws.onclose = () => {
             console.log('Disconnected from chat room');
-            hostIndicator.classList.remove('online');
-            guestsContainer.innerHTML = '';
+            if (hostIndicator) hostIndicator.classList.remove('online');
+            if (guestsContainer) guestsContainer.innerHTML = '';
             
             if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                 reconnectAttempts++;
@@ -376,7 +385,6 @@ function connectToRoom(roomId) {
             } else {
                 console.log('Max reconnection attempts reached');
                 displaySystemMessage('Connection lost. Please refresh the page to reconnect.');
-                // Clear session on max retries
                 localStorage.removeItem('sessionId');
                 sessionId = null;
             }
@@ -384,13 +392,13 @@ function connectToRoom(roomId) {
 
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
-            hostIndicator.classList.remove('online');
-            guestsContainer.innerHTML = '';
+            if (hostIndicator) hostIndicator.classList.remove('online');
+            if (guestsContainer) guestsContainer.innerHTML = '';
         };
     } catch (error) {
         console.error('WebSocket connection error:', error);
-        hostIndicator.classList.remove('online');
-        guestsContainer.innerHTML = '';
+        if (hostIndicator) hostIndicator.classList.remove('online');
+        if (guestsContainer) guestsContainer.innerHTML = '';
     }
 }
 

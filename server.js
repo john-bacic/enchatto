@@ -23,7 +23,8 @@ function createRoom(roomId) {
         hostId: null,
         clients: [],
         colorIndex: 0,
-        lastActivity: Date.now()
+        lastActivity: Date.now(),
+        hostSession: null  // Store the host's session ID
     });
     return rooms.get(roomId);
 }
@@ -71,16 +72,19 @@ wss.on('connection', (ws, req) => {
     let clientId;
     let isHost = false;
 
-    // Check if this is a reconnection
+    // Check if this is a reconnection with a valid session
     if (sessionId && clientSessions.has(sessionId)) {
         const session = clientSessions.get(sessionId);
         clientId = session.clientId;
-        isHost = session.isHost;
+        
+        // Only allow host status if this is the original host's session
+        isHost = session.isHost && room.hostSession === sessionId;
         
         // Remove old websocket connection if it exists
         const existingClient = room.clients.find(c => c.clientId === clientId);
         if (existingClient) {
             existingClient.ws = ws;
+            existingClient.isHost = isHost; // Update host status
         } else {
             // Add client back to room
             room.clients.push({
@@ -95,37 +99,60 @@ wss.on('connection', (ws, req) => {
     } else {
         // Generate new client ID and session
         clientId = Math.random().toString(36).substr(2, 9);
-        isHost = !room.hostId;
+        
+        // Only become host if room has no host and no host session
+        isHost = !room.hostId && !room.hostSession;
         
         if (isHost) {
             room.hostId = clientId;
+            const newSessionId = Math.random().toString(36).substr(2, 9);
+            room.hostSession = newSessionId; // Store host's session ID
+            
+            const session = {
+                clientId,
+                isHost: true,
+                joinTime: Date.now(),
+                colorIndex: -1,
+                roomId,
+                name: 'Host'
+            };
+            
+            clientSessions.set(newSessionId, session);
+            
+            // Send session ID to client
+            ws.send(JSON.stringify({
+                type: 'session',
+                sessionId: newSessionId
+            }));
+        } else {
+            // Create guest session
+            const newSessionId = Math.random().toString(36).substr(2, 9);
+            const session = {
+                clientId,
+                isHost: false,
+                joinTime: Date.now(),
+                colorIndex: room.colorIndex++,
+                roomId,
+                name: `Guest ${room.clients.length + 1}`
+            };
+            
+            clientSessions.set(newSessionId, session);
+            
+            // Send session ID to client
+            ws.send(JSON.stringify({
+                type: 'session',
+                sessionId: newSessionId
+            }));
         }
-
-        const session = {
-            clientId,
-            isHost,
-            joinTime: Date.now(),
-            colorIndex: room.colorIndex++,
-            roomId
-        };
-        
-        const newSessionId = Math.random().toString(36).substr(2, 9);
-        clientSessions.set(newSessionId, session);
 
         room.clients.push({
             clientId,
             name: isHost ? 'Host' : `Guest ${room.clients.length + 1}`,
             isHost,
-            joinTime: session.joinTime,
-            colorIndex: session.colorIndex,
+            joinTime: Date.now(),
+            colorIndex: isHost ? -1 : room.colorIndex - 1,
             ws
         });
-
-        // Send session ID to client
-        ws.send(JSON.stringify({
-            type: 'session',
-            sessionId: newSessionId
-        }));
     }
 
     // Send initial data to client
@@ -193,12 +220,17 @@ wss.on('connection', (ws, req) => {
                         newHost.isHost = true;
                         room.hostId = newHost.clientId;
                         
-                        // Update session
+                        // Update host session
                         const session = Array.from(clientSessions.entries())
                             .find(([_, s]) => s.clientId === newHost.clientId);
                         if (session) {
                             session[1].isHost = true;
+                            room.hostSession = session[0]; // Update host session ID
                         }
+                    } else {
+                        // If no clients left, clear host session
+                        room.hostSession = null;
+                        room.hostId = null;
                     }
                     broadcastParticipants(roomId);
                 }

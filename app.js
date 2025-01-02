@@ -8,15 +8,11 @@ if ('serviceWorker' in navigator) {
 }
 
 let ws = null;
-let sessionId = localStorage.getItem('sessionId');
 let isHeaderExpanded = true;
 let isHost = false;
 let clientId = null;
 let clientList = []; // Store the current client list
 let participants = new Map();
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_DELAY = 2000;
 
 // Get guest color by index - this is now fixed per guest
 function getGuestColor(colorIndex) {
@@ -44,8 +40,8 @@ const messagesContainer = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const copyUrlBtn = document.getElementById('copy-url');
-const guestsContainer = document.getElementById('guests');
-const hostIndicator = document.getElementById('hostIndicator');
+const guestsContainer = document.querySelector('.guests');
+const hostIndicator = document.querySelector('.host .status-indicator');
 const hostName = document.getElementById('hostName');
 
 // Function to toggle header expansion
@@ -77,60 +73,112 @@ messageInput.addEventListener('focus', () => {
 });
 
 // Update participants list
-function updateParticipants(clients) {
-    // Ensure the guests container exists
-    if (!guestsContainer) {
-        console.error('Guests container not found');
-        return;
-    }
-
-    guestsContainer.innerHTML = '';
-    participants.clear();
+function updateParticipants(newClientList) {
+    console.log('Updating participants:', newClientList);
     
-    clients.forEach(client => {
-        if (client.clientId === clientId) {
-            // Update our own name if it's different
-            const nameElement = isHost ? hostName : 
-                                      document.querySelector('.guest-name');
-            if (nameElement && nameElement.textContent !== client.name) {
-                nameElement.textContent = client.name;
-            }
-        }
-        
-        if (!client.isHost) {
-            const guestElement = document.createElement('div');
-            guestElement.className = 'guest';
-            guestElement.innerHTML = `
-                <span class="name guest-name">${client.name}</span>
-            `;
-            
-            // Make guest name editable if it's our own name
-            if (client.clientId === clientId) {
-                const nameSpan = guestElement.querySelector('.name');
-                makeNameEditable(nameSpan, false);
-            }
-            
-            guestsContainer.appendChild(guestElement);
-            participants.set(client.clientId, {
-                element: guestElement,
-                name: client.name,
-                isHost: client.isHost
+    // Get list of disconnected users (in old list but not in new list)
+    const disconnectedUsers = clientList
+        .filter(oldClient => !newClientList.some(newClient => newClient.id === oldClient.id))
+        .map(client => client.id);
+    
+    // Fade out messages from disconnected users
+    if (disconnectedUsers.length > 0) {
+        disconnectedUsers.forEach(userId => {
+            document.querySelectorAll(`.message[data-sender="${userId}"]`).forEach(msg => {
+                msg.classList.add('disconnected');
             });
-        } else if (client.isHost && hostName) {
-            // Update host name in header if we're seeing the host
-            if (client.name) {
-                hostName.textContent = client.name;
-                if (client.clientId === clientId) {
-                    makeNameEditable(hostName, true);
-                }
-            }
-            participants.set(client.clientId, {
-                element: document.querySelector('.header-main'),
-                name: client.name,
-                isHost: true
+        });
+    }
+    
+    // Check for name changes and update message labels
+    newClientList.forEach(newClient => {
+        const oldClient = clientList.find(c => c.id === newClient.id);
+        if (oldClient && oldClient.name !== newClient.name) {
+            // Name has changed, update all message labels for this user
+            document.querySelectorAll(`.message[data-sender="${newClient.id}"] .guest-label`).forEach(label => {
+                label.textContent = newClient.name || (newClient.isHost ? 'Host' : `Guest ${newClient.colorIndex + 1}`);
             });
         }
     });
+    
+    clientList = newClientList;
+    
+    // Clear existing guests
+    guestsContainer.innerHTML = '';
+    
+    // Find host client
+    const hostClient = newClientList.find(client => client.isHost);
+    const hostOnline = hostClient && hostClient.id;
+    
+    // Update host indicator and name
+    if (hostOnline) {
+        hostIndicator.classList.add('online');
+        hostName.textContent = hostClient.name || 'Host';
+        if (hostClient.id === clientId) {
+            makeNameEditable(hostName, true);
+        }
+    } else {
+        hostIndicator.classList.remove('online');
+    }
+    
+    // Sort guests by their color index to maintain consistent order
+    const sortedGuests = newClientList
+        .filter(client => !client.isHost)
+        .sort((a, b) => a.colorIndex - b.colorIndex);
+    
+    // Add each guest
+    sortedGuests.forEach((client) => {
+        const participantEl = document.createElement('div');
+        participantEl.className = 'participant';
+        participantEl.id = `participant-${client.id}`;
+        
+        const indicator = document.createElement('span');
+        indicator.className = 'status-indicator online';
+        const guestColor = getGuestColor(client.colorIndex);
+        indicator.style.backgroundColor = guestColor;
+        
+        const name = document.createElement('span');
+        name.className = 'name';
+        
+        // If it's the current client, make the name editable
+        if (client.id === clientId) {
+            name.textContent = client.name || 'Me';
+            makeNameEditable(name);
+        } else {
+            name.textContent = client.name || `Guest ${client.colorIndex + 1}`;
+        }
+        
+        name.style.color = guestColor;
+        
+        participantEl.appendChild(indicator);
+        participantEl.appendChild(name);
+        guestsContainer.appendChild(participantEl);
+        
+        // Store participant info for message coloring
+        participants.set(client.id, {
+            number: client.colorIndex + 1,
+            name: client.name,
+            color: guestColor,
+            isHost: client.isHost
+        });
+    });
+
+    // Update current client's guest number if they're a guest
+    if (!isHost) {
+        const myIndex = sortedGuests.findIndex(client => client.id === clientId);
+        if (myIndex !== -1) {
+            const client = sortedGuests[myIndex];
+            participants.set(clientId, {
+                number: client.colorIndex + 1,
+                name: client.name,
+                color: getGuestColor(client.colorIndex),
+                isHost: false
+            });
+        }
+    }
+    
+    // Update guest labels after participants change
+    updateGuestLabels();
 }
 
 function updateGuestLabels() {
@@ -150,39 +198,54 @@ function updateGuestLabels() {
 }
 
 // Function to make a name element editable
-function makeNameEditable(element, isHostUser) {
-    if (!element) return;
-    
-    element.contentEditable = true;
-    element.spellcheck = false;
-    
-    element.addEventListener('focus', function() {
-        const range = document.createRange();
-        range.selectNodeContents(this);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
+function makeNameEditable(nameElement, isHost = false) {
+    nameElement.addEventListener('click', () => {
+        const currentName = nameElement.textContent;
+        nameElement.contentEditable = true;
+        nameElement.textContent = '';  // Clear text to show placeholder
+        nameElement.focus();
+        
+        const saveEdit = () => {
+            const newName = nameElement.textContent.trim();
+            if (newName && newName !== currentName) {
+                ws.send(JSON.stringify({
+                    type: 'name_change',
+                    name: newName
+                }));
+            } else if (!newName) {
+                // If empty, restore the previous name
+                nameElement.textContent = currentName;
+            }
+            nameElement.contentEditable = false;
+        };
+        
+        nameElement.addEventListener('blur', saveEdit, { once: true });
+        nameElement.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                nameElement.blur();
+            }
+        });
     });
+}
+
+// Create participant element
+function createParticipantElement(id, isGuest = true) {
+    const participant = document.createElement('div');
+    participant.className = 'participant';
+    participant.id = `participant-${id}`;
     
-    element.addEventListener('blur', function() {
-        if (this.textContent.trim() === '') {
-            this.textContent = isHostUser ? 'Host' : 'Guest';
-        }
-        // Send name change to server
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                type: 'name_change',
-                name: this.textContent.trim()
-            }));
-        }
-    });
+    const indicator = document.createElement('span');
+    indicator.className = 'status-indicator online';
     
-    element.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            this.blur();
-        }
-    });
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = isGuest ? `Guest ${participants.size}` : 'Me (Host)';
+    
+    participant.appendChild(indicator);
+    participant.appendChild(name);
+    
+    return participant;
 }
 
 // Handle received messages
@@ -245,20 +308,11 @@ function updateGuestName(guestId, newName) {
 
 // Handle name changes
 function handleNameChange(data) {
-    const { clientId: changedClientId, name, isHost: isHostUser } = data;
-    const participant = participants.get(changedClientId);
-    
+    const participant = participants.get(data.id);
     if (participant) {
-        participant.name = name;
-        const nameElement = participant.element.querySelector('.name');
-        if (nameElement) {
-            nameElement.textContent = name;
-        }
-        
-        // If this is the host, update the host name in the header
-        if (isHostUser && hostName) {
-            hostName.textContent = name;
-        }
+        participant.name = data.name;
+        updateGuestName(data.id, data.name);
+        updateParticipants(Array.from(participants.values()));
     }
 }
 
@@ -305,27 +359,21 @@ function connectToRoom(roomId) {
     }
 
     try {
+        // Use current window location to determine WebSocket URL
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}${sessionId ? `&sessionId=${sessionId}` : ''}`;
+        const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}`;
         console.log('Connecting to WebSocket:', wsUrl);
         
         ws = new WebSocket(wsUrl);
         
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
-            reconnectAttempts = 0;
-            if (messageInput) messageInput.focus();
+            messageInput.focus();
         };
 
         ws.onmessage = (event) => {
             console.log('Received message:', event.data);
             const data = JSON.parse(event.data);
-            
-            if (data.type === 'session') {
-                sessionId = data.sessionId;
-                localStorage.setItem('sessionId', sessionId);
-                return;
-            }
             
             if (data.type === 'participants') {
                 updateParticipants(data.clients);
@@ -336,35 +384,37 @@ function connectToRoom(roomId) {
                 isHost = data.isHost;
                 updateThemeColor(isHost);  // Update theme color on init
                 
-                if (!isHost && headerExpanded && expandBtn) {
+                // Show/hide QR code section based on role
+                if (!isHost) {
                     headerExpanded.style.display = 'none';
                     expandBtn.style.display = 'none';
                     
+                    // Get guest color based on color index
                     const myColor = getGuestColor(data.colorIndex);
                     
+                    // Color the header and send button
                     const header = document.querySelector('.header-main');
                     const sendButton = document.getElementById('sendBtn');
-                    
-                    if (header && sendButton) {
-                        header.style.backgroundColor = myColor;
-                        header.style.color = '#ffffff';
-                        sendButton.style.backgroundColor = myColor;
-                        sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                        sendButton.style.border = 'none';
-                    }
-                } else if (isHost && hostName) {
+                    header.style.backgroundColor = myColor;
+                    header.style.color = '#ffffff';
+                    sendButton.style.backgroundColor = myColor;
+                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                    sendButton.style.border = 'none';
+                } else {
+                    // Make host name editable and set initial header state
+                    const hostName = document.getElementById('hostName');
                     makeNameEditable(hostName, true);
                     setHeaderExpanded(true);
                     
+                    // Get the computed background color of the header
                     const header = document.querySelector('.header-main');
-                    const sendButton = document.getElementById('sendBtn');
+                    const headerColor = getComputedStyle(header).backgroundColor;
                     
-                    if (header && sendButton) {
-                        const headerColor = getComputedStyle(header).backgroundColor;
-                        sendButton.style.backgroundColor = headerColor;
-                        sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                        sendButton.style.border = 'none';
-                    }
+                    // Set host send button to match header color
+                    const sendButton = document.getElementById('sendBtn');
+                    sendButton.style.backgroundColor = headerColor;
+                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                    sendButton.style.border = 'none';
                 }
                 
                 updateParticipants(data.clients);
@@ -375,30 +425,23 @@ function connectToRoom(roomId) {
 
         ws.onclose = () => {
             console.log('Disconnected from chat room');
-            if (hostIndicator) hostIndicator.classList.remove('online');
-            if (guestsContainer) guestsContainer.innerHTML = '';
-            
-            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                reconnectAttempts++;
-                console.log(`Reconnecting... Attempt ${reconnectAttempts}`);
-                setTimeout(() => connectToRoom(roomId), RECONNECT_DELAY);
-            } else {
-                console.log('Max reconnection attempts reached');
-                displaySystemMessage('Connection lost. Please refresh the page to reconnect.');
-                localStorage.removeItem('sessionId');
-                sessionId = null;
-            }
+            hostIndicator.classList.remove('online');
+            guestsContainer.innerHTML = '';
+            setTimeout(() => {
+                console.log('Attempting to reconnect...');
+                connectToRoom(roomId);
+            }, 2000);
         };
 
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
-            if (hostIndicator) hostIndicator.classList.remove('online');
-            if (guestsContainer) guestsContainer.innerHTML = '';
+            hostIndicator.classList.remove('online');
+            guestsContainer.innerHTML = '';
         };
     } catch (error) {
         console.error('WebSocket connection error:', error);
-        if (hostIndicator) hostIndicator.classList.remove('online');
-        if (guestsContainer) guestsContainer.innerHTML = '';
+        hostIndicator.classList.remove('online');
+        guestsContainer.innerHTML = '';
     }
 }
 

@@ -16,18 +16,20 @@ app.use(express.static(path.join(__dirname)));
 const rooms = new Map();
 
 // Heartbeat intervals (in milliseconds)
-const HEARTBEAT_INTERVAL = 30000;
-const CLIENT_TIMEOUT = 45000;
+const HEARTBEAT_INTERVAL = 45000; // 45 seconds
+const CLIENT_TIMEOUT = 90000;    // 90 seconds - doubled for mobile
 
 function noop() {}
 
 function heartbeat() {
     this.isAlive = true;
+    this.lastPing = Date.now();
 }
 
 // Initialize heartbeat for a new WebSocket connection
 function initializeHeartbeat(ws) {
     ws.isAlive = true;
+    ws.lastPing = Date.now();
     ws.on('pong', heartbeat);
 }
 
@@ -78,13 +80,20 @@ function createRoom(roomId) {
 // Start heartbeat interval for all connections
 const heartbeatInterval = setInterval(() => {
     wss.clients.forEach(ws => {
-        if (ws.isAlive === false) {
-            console.log('Client timed out, terminating connection');
+        const timeSinceLastPing = Date.now() - ws.lastPing;
+        
+        // Only terminate if significantly over timeout
+        if (!ws.isAlive && timeSinceLastPing > CLIENT_TIMEOUT) {
+            console.log('Client timed out after extended period, terminating connection');
             return ws.terminate();
         }
 
         ws.isAlive = false;
-        ws.ping(noop);
+        try {
+            ws.ping(noop);
+        } catch (error) {
+            console.error('Error sending ping:', error);
+        }
     });
 }, HEARTBEAT_INTERVAL);
 

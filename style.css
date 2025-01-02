@@ -250,6 +250,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* transform: translateY(-38px); */
   
 }
 
@@ -283,6 +284,7 @@ body {
     justify-content: space-between;
     align-items: center;
     border-radius: 28px;
+
 }
 
 .guests {

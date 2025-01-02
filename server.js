@@ -118,6 +118,12 @@ wss.on('connection', (ws, req) => {
         try {
             const message = JSON.parse(data);
             
+            if (message.type === 'keep_alive') {
+                // Reset client's alive status
+                ws.isAlive = true;
+                return;
+            }
+            
             if (message.type === 'name_change') {
                 // Update client's name in the room
                 const client = room.clients.find(c => c.clientId === clientId);
@@ -174,6 +180,11 @@ wss.on('connection', (ws, req) => {
             broadcastParticipants(roomId);
         }
     });
+});
+
+// Add route for keep-alive requests
+app.get('/keep-alive', (req, res) => {
+    res.send('alive');
 });
 
 // Start server

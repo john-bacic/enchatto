@@ -7,6 +7,17 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// Register service worker for background functionality
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+        .then(registration => {
+            console.log('ServiceWorker registration successful');
+        })
+        .catch(err => {
+            console.error('ServiceWorker registration failed:', err);
+        });
+}
+
 let ws = null;
 let isHeaderExpanded = true;
 let isHost = false;
@@ -352,6 +363,34 @@ function updateThemeColor(isHost) {
     document.querySelector('meta[name="theme-color"]').setAttribute('content', themeColor);
 }
 
+// Handle page visibility changes
+let isPageVisible = true;
+let keepAliveInterval;
+const KEEP_ALIVE_INTERVAL = 20000; // 20 seconds
+
+document.addEventListener('visibilitychange', () => {
+    isPageVisible = document.visibilityState === 'visible';
+    console.log('Page visibility changed:', isPageVisible ? 'visible' : 'hidden');
+    
+    if (!isPageVisible) {
+        // Start keep-alive when page is hidden
+        if (!keepAliveInterval) {
+            keepAliveInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'keep_alive' }));
+                    fetch('/keep-alive'); // Keep service worker alive
+                }
+            }, KEEP_ALIVE_INTERVAL);
+        }
+    } else {
+        // Stop keep-alive when page is visible again
+        if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+        }
+    }
+});
+
 // Connect to WebSocket room
 function connectToRoom(roomId) {
     if (ws) {
@@ -359,7 +398,6 @@ function connectToRoom(roomId) {
     }
 
     try {
-        // Use current window location to determine WebSocket URL
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}`;
         console.log('Connecting to WebSocket:', wsUrl);
@@ -369,6 +407,16 @@ function connectToRoom(roomId) {
         ws.onopen = () => {
             console.log('Connected to chat room:', roomId);
             messageInput.focus();
+            
+            // Start keep-alive if page is hidden
+            if (!isPageVisible && !keepAliveInterval) {
+                keepAliveInterval = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'keep_alive' }));
+                        fetch('/keep-alive');
+                    }
+                }, KEEP_ALIVE_INTERVAL);
+            }
         };
 
         ws.onmessage = (event) => {
@@ -427,6 +475,14 @@ function connectToRoom(roomId) {
             console.log('Disconnected from chat room');
             hostIndicator.classList.remove('online');
             guestsContainer.innerHTML = '';
+            
+            // Clear keep-alive interval
+            if (keepAliveInterval) {
+                clearInterval(keepAliveInterval);
+                keepAliveInterval = null;
+            }
+            
+            // Attempt to reconnect
             setTimeout(() => {
                 console.log('Attempting to reconnect...');
                 connectToRoom(roomId);
@@ -516,4 +572,4 @@ document.addEventListener('DOMContentLoaded', () => {
     
     initializeRoomUrl(roomId);
     connectToRoom(roomId);
-});s
+});

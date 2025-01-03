@@ -382,13 +382,14 @@ body {
 }
 
 .message {
-    position: relative;
-    width: 50%;
-    padding: 10px 15px;
-    border-radius: 20px;
+    max-width: 70%;
+    padding: 8px 12px;
+    border-radius: 12px;
+    margin-bottom: 4px;
     word-wrap: break-word;
-    transition: opacity 0.3s ease, background-color 0.3s ease;
-    margin: 4px 0;
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+    line-height: 1.4;
 }
 
 .message.guest {

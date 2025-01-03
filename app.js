@@ -7,8 +7,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-let ws = null;
-let isHeaderExpanded = true;
+let socket;
 let isHost = false;
 let clientId = null;
 let currentRoomId = null;
@@ -202,7 +201,7 @@ function updateGuestLabels() {
     console.log('Updating guest labels:', { guestCount, shouldShow, participants: Array.from(participants.entries()) });
 }
 
-// Function to make a name element editable
+// Make name editable
 function makeNameEditable(nameElement, isHost = false) {
     nameElement.addEventListener('click', () => {
         const currentName = nameElement.textContent;
@@ -213,10 +212,7 @@ function makeNameEditable(nameElement, isHost = false) {
         const saveEdit = () => {
             const newName = nameElement.textContent.trim();
             if (newName && newName !== currentName) {
-                ws.send(JSON.stringify({
-                    type: 'name_change',
-                    name: newName
-                }));
+                socket.emit('name-change', newName);
             } else if (!newName) {
                 // If empty, restore the previous name
                 nameElement.textContent = currentName;
@@ -232,25 +228,6 @@ function makeNameEditable(nameElement, isHost = false) {
             }
         });
     });
-}
-
-// Create participant element
-function createParticipantElement(id, isGuest = true) {
-    const participant = document.createElement('div');
-    participant.className = 'participant';
-    participant.id = `participant-${id}`;
-    
-    const indicator = document.createElement('span');
-    indicator.className = 'status-indicator online';
-    
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = isGuest ? `Guest ${participants.size}` : 'Me (Host)';
-    
-    participant.appendChild(indicator);
-    participant.appendChild(name);
-    
-    return participant;
 }
 
 // Handle received messages
@@ -304,185 +281,144 @@ function handleReceivedMessage(data) {
     updateGuestLabels();
 }
 
-// Update guest name in all their messages when it changes
-function updateGuestName(guestId, newName) {
-    document.querySelectorAll(`.message[data-sender="${guestId}"] .sender-name`).forEach(nameEl => {
-        nameEl.textContent = newName;
-    });
-}
-
-// Handle name changes
-function handleNameChange(data) {
-    const participant = participants.get(data.id);
-    if (participant) {
-        participant.name = data.name;
-        updateGuestName(data.id, data.name);
-        updateParticipants(Array.from(participants.values()));
-    }
-}
-
-// Send message
-function sendMessage() {
-    const message = messageInput.value.trim();
-    if (message) {
-        ws.send(JSON.stringify({
-            type: 'message',
-            content: message  
-        }));
-        messageInput.value = '';
-        // Blur input to dismiss keyboard on mobile
-        messageInput.blur();
-    }
-}
-
-// Add event listeners for sending messages
+// Send message when button is clicked
 sendBtn.addEventListener('click', () => {
-    sendMessage();
-    // Extra blur for mobile keyboard dismissal
-    messageInput.blur();
-});
-
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        sendMessage();
-        // Blur input to dismiss keyboard on mobile
-        messageInput.blur();
+    const content = messageInput.value.trim();
+    if (content) {
+        socket.emit('chat-message', content);
+        messageInput.value = '';
     }
 });
 
-// Update theme color based on role
+// Send message when Enter is pressed
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendBtn.click();
+    }
+});
+
+// Update theme color based on host/guest status
 function updateThemeColor(isHost) {
-    const themeColor = '#1A1B25';  // Same dark theme for both host and guest
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', themeColor);
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+        metaThemeColor.setAttribute('content', isHost ? '#1a1a1a' : '#ffffff');
+    }
 }
 
-// Handle page visibility changes
-document.addEventListener('visibilitychange', () => {
-    const isVisible = document.visibilityState === 'visible';
-    console.log('Page visibility changed:', isVisible ? 'visible' : 'hidden');
-    
-    if (isVisible && currentRoomId && !isReconnecting) {
-        console.log('Page visible, checking connection status...');
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            console.log('Connection lost, attempting to reconnect...');
-            reconnectAttempts = 0;
-            connectToRoom(currentRoomId);
-        }
-    }
-});
-
-// Connect to WebSocket room
+// Connect to chat room
 function connectToRoom(roomId) {
     if (!roomId) {
         console.error('No room ID provided');
         return;
     }
     
-    currentRoomId = roomId; // Store current room ID
+    currentRoomId = roomId;
     isReconnecting = true;
 
-    if (ws) {
-        ws.close();
+    if (socket) {
+        socket.disconnect();
     }
 
     try {
-        // Use current window location to determine WebSocket URL
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}?room=${roomId}`;
-        console.log('Connecting to WebSocket:', wsUrl);
-        
-        ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => {
-            console.log('Connected to chat room:', roomId);
+        // Initialize Socket.IO
+        socket = io({
+            reconnection: true,
+            reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+            reconnectionDelay: RECONNECT_DELAY,
+            reconnectionDelayMax: RECONNECT_DELAY * 2,
+            timeout: 10000
+        });
+
+        // Connection event handlers
+        socket.on('connect', () => {
+            console.log('Connected to server');
             isReconnecting = false;
             reconnectAttempts = 0;
-            messageInput.focus();
-        };
+            socket.emit('join-room', roomId);
+        });
 
-        ws.onmessage = (event) => {
-            console.log('Received message:', event.data);
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'participants') {
-                updateParticipants(data.clients);
-            } else if (data.type === 'message') {
-                handleReceivedMessage(data);
-            } else if (data.type === 'init') {
-                clientId = data.clientId;
-                isHost = data.isHost;
-                updateThemeColor(isHost);  // Update theme color on init
-                
-                // Show/hide QR code section based on role
-                if (!isHost) {
-                    headerExpanded.style.display = 'none';
-                    expandBtn.style.display = 'none';
-                    
-                    // Get guest color based on color index
-                    const myColor = getGuestColor(data.colorIndex);
-                    
-                    // Color the header and send button
-                    const header = document.querySelector('.header-main');
-                    const sendButton = document.getElementById('sendBtn');
-                    header.style.backgroundColor = myColor;
-                    header.style.color = '#ffffff';
-                    sendButton.style.backgroundColor = myColor;
-                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                    sendButton.style.border = 'none';
-                } else {
-                    // Make host name editable and set initial header state
-                    const hostName = document.getElementById('hostName');
-                    makeNameEditable(hostName, true);
-                    setHeaderExpanded(true);
-                    
-                    // Get the computed background color of the header
-                    const header = document.querySelector('.header-main');
-                    const headerColor = getComputedStyle(header).backgroundColor;
-                    
-                    // Set host send button to match header color
-                    const sendButton = document.getElementById('sendBtn');
-                    sendButton.style.backgroundColor = headerColor;
-                    sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
-                    sendButton.style.border = 'none';
-                }
-                
-                updateParticipants(data.clients);
-            } else if (data.type === 'name_change') {
-                handleNameChange(data);
-            }
-        };
+        socket.on('disconnect', (reason) => {
+            console.log('Disconnected:', reason);
+            document.querySelectorAll('.status-indicator').forEach(indicator => {
+                indicator.classList.remove('online');
+            });
+        });
 
-        ws.onclose = () => {
-            console.log('Disconnected from chat room');
-            hostIndicator.classList.remove('online');
-            guestsContainer.innerHTML = '';
-            
-            if (document.visibilityState === 'visible' && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                reconnectAttempts++;
-                const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1); // Exponential backoff
-                console.log(`Attempting reconnect ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+        socket.on('reconnect_attempt', (attemptNumber) => {
+            console.log(`Reconnection attempt ${attemptNumber}`);
+            isReconnecting = true;
+        });
+
+        socket.on('reconnect', (attemptNumber) => {
+            console.log(`Reconnected after ${attemptNumber} attempts`);
+            isReconnecting = false;
+            socket.emit('join-room', roomId);
+        });
+
+        socket.on('reconnect_failed', () => {
+            console.log('Failed to reconnect');
+            isReconnecting = false;
+        });
+
+        // Chat event handlers
+        socket.on('init', (data) => {
+            clientId = data.clientId;
+            isHost = data.isHost;
+            updateThemeColor(isHost);
+
+            if (!isHost) {
+                headerExpanded.style.display = 'none';
+                expandBtn.style.display = 'none';
                 
-                setTimeout(() => {
-                    if (currentRoomId) {
-                        connectToRoom(currentRoomId);
-                    }
-                }, delay);
+                const myColor = getGuestColor(data.colorIndex);
+                
+                const header = document.querySelector('.header-main');
+                const sendButton = document.getElementById('sendBtn');
+                header.style.backgroundColor = myColor;
+                header.style.color = '#ffffff';
+                sendButton.style.backgroundColor = myColor;
+                sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                sendButton.style.border = 'none';
             } else {
-                isReconnecting = false;
+                const hostName = document.getElementById('hostName');
+                makeNameEditable(hostName, true);
+                setHeaderExpanded(true);
+                
+                const header = document.querySelector('.header-main');
+                const headerColor = getComputedStyle(header).backgroundColor;
+                
+                const sendButton = document.getElementById('sendBtn');
+                sendButton.style.backgroundColor = headerColor;
+                sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
+                sendButton.style.border = 'none';
             }
-        };
+            
+            updateParticipants(data.clients);
+        });
 
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            hostIndicator.classList.remove('online');
-            guestsContainer.innerHTML = '';
-        };
+        socket.on('participants', (clients) => {
+            updateParticipants(clients);
+        });
+
+        socket.on('chat-message', (data) => {
+            handleReceivedMessage(data);
+        });
+
     } catch (error) {
-        console.error('WebSocket connection error:', error);
-        hostIndicator.classList.remove('online');
-        guestsContainer.innerHTML = '';
+        console.error('Connection error:', error);
+        if (!isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            setTimeout(() => connectToRoom(roomId), RECONNECT_DELAY);
+        }
     }
+}
+
+// Get room ID from URL and connect
+const urlParams = new URLSearchParams(window.location.search);
+const roomId = urlParams.get('room');
+if (roomId) {
+    connectToRoom(roomId);
 }
 
 // Generate random room ID
@@ -541,8 +477,8 @@ function initializeRoomUrl(roomId) {
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
-    if (ws) {
-        ws.close();
+    if (socket) {
+        socket.disconnect();
     }
 });
 

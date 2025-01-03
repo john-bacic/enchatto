@@ -255,14 +255,53 @@ function createParticipantElement(id, isGuest = true) {
 
 // Handle received messages
 function handleReceivedMessage(data) {
-    const messageElement = document.createElement('div');
-    messageElement.className = `message ${data.isHost ? 'host' : 'guest'}`;
-    messageElement.textContent = data.content; // Line breaks are preserved due to white-space: pre-wrap
-    messageElement.setAttribute('data-client-id', data.clientId);
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message';
+    messageDiv.dataset.sender = data.senderId; // Add sender ID as data attribute
     
-    const messagesContainer = document.getElementById('messages');
-    messagesContainer.appendChild(messageElement);
+    // Add host/guest class based on sender's role
+    if (data.isHost) {
+        messageDiv.classList.add('host');
+        // Add guest label for host messages too
+        const label = document.createElement('div');
+        label.className = 'guest-label';
+        label.textContent = 'Host';
+        messageDiv.appendChild(label);
+    } else {
+        messageDiv.classList.add('guest');
+        // Get sender info for guest messages
+        const sender = participants.get(data.senderId);
+        if (sender) {
+            messageDiv.style.backgroundColor = sender.color;
+            // Add guest label
+            const label = document.createElement('div');
+            label.className = 'guest-label';
+            label.textContent = sender.name || `Guest ${sender.number}`;
+            label.style.color = sender.color;
+            messageDiv.appendChild(label);
+        }
+    }
+    
+    // Check if sender is disconnected
+    if (!clientList.some(client => client.id === data.senderId)) {
+        messageDiv.classList.add('disconnected');
+    }
+    
+    // Add self indicator if message is from current client
+    if (data.senderId === clientId) {
+        messageDiv.classList.add('self');
+    }
+    
+    const textDiv = document.createElement('div');
+    textDiv.className = 'text';
+    textDiv.textContent = data.content;  
+    messageDiv.appendChild(textDiv);
+    
+    messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    // Update guest labels after adding new message
+    updateGuestLabels();
 }
 
 // Update guest name in all their messages when it changes
@@ -330,7 +369,7 @@ function sendMessage() {
         // Send via WebSocket
         ws.send(JSON.stringify({
             type: 'message',
-            content: message  // Line breaks are preserved in the message content
+            content: message  
         }));
     }
 }

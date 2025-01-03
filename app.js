@@ -321,17 +321,56 @@ function handleNameChange(data) {
     }
 }
 
+const DEFAULT_HEIGHT = '48px';
+
+function resetToDefault() {
+    // Force reflow
+    messageInput.style.height = 'auto';
+    messageInput.offsetHeight;
+    
+    // Set heights
+    messageInput.style.height = DEFAULT_HEIGHT;
+    messageInput.parentElement.style.height = '68px';
+}
+
+function adjustHeight() {
+    // Reset to default if placeholder is showing (input is empty)
+    if (!messageInput.value) {
+        resetToDefault();
+        return;
+    }
+
+    const scrollTop = messageInput.scrollTop;
+    
+    // Reset height to minimum to get the correct scrollHeight
+    messageInput.style.height = DEFAULT_HEIGHT;
+    
+    // Calculate new height based on content
+    const newHeight = Math.min(Math.max(messageInput.scrollHeight, 47), 120);
+    messageInput.style.height = newHeight + 'px';
+    
+    // Adjust input area height
+    const baseInputAreaHeight = 68;
+    const additionalHeight = Math.max(0, newHeight - 48);
+    messageInput.parentElement.style.height = (baseInputAreaHeight + additionalHeight) + 'px';
+    
+    // Restore scroll position
+    messageInput.scrollTop = scrollTop;
+}
+
 // Send message
 function sendMessage() {
     const message = messageInput.value.trim();
     if (message) {
+        // Clear input and reset height
+        messageInput.value = '';
+        resetToDefault();
+        
+        // Send via WebSocket
         ws.send(JSON.stringify({
             type: 'message',
             content: message  
         }));
-        messageInput.value = '';
-        // Blur input to dismiss keyboard on mobile
-        messageInput.blur();
     }
 }
 
@@ -343,13 +382,37 @@ sendBtn.addEventListener('click', () => {
 });
 
 messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
-        // Blur input to dismiss keyboard on mobile
-        messageInput.blur();
     }
 });
+
+// Handle text input and height adjustment
+messageInput.addEventListener('input', adjustHeight);
+
+// Handle Enter key for manual line breaks
+messageInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        
+        const start = messageInput.selectionStart;
+        const end = messageInput.selectionEnd;
+        
+        const text = messageInput.value;
+        messageInput.value = text.substring(0, start) + '\n' + text.substring(end);
+        
+        messageInput.selectionStart = messageInput.selectionEnd = start + 1;
+        
+        adjustHeight();
+    } else if (e.key === 'Backspace' && messageInput.value.length <= 1) {
+        // If backspace will make the input empty, reset height
+        setTimeout(resetToDefault, 0);
+    }
+});
+
+// Set initial height
+resetToDefault();
 
 // Update theme color based on role
 function updateThemeColor(isHost) {

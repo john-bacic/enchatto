@@ -512,7 +512,7 @@ body {
     cursor: pointer;
     transition: all 0.2s ease;
     font-weight: 500;
-    aspect-ratio: 1;
+    aspect-ratio: 1:1;
     max-width: 48px;
     max-height: 48px;
 }

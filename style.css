@@ -24,6 +24,7 @@
     --text-muted: rgba(255, 255, 255, 0.9);
     --text-dark: #333333;
     --text-touqose: #68B7CF;
+    --text-color: #1A1B25;
     
     /* White variations */
     --white: #ffffff;
@@ -44,6 +45,7 @@
     --border-dark: #495057;
     --border-touqose: #68B7CF55;
     --guest-message-color: inherit;
+    --guest-color: #495057;
 }
 
 * {
@@ -182,6 +184,7 @@ body {
     margin-top: 20px;
     width: 100%;
 }
+
 
 #qrcode {
     background-color: var(--white);
@@ -372,7 +375,6 @@ body {
     /* background: var(--background-color); */
     /* background: var(--background-color) url('BGlines.svg') top/180% fixed no-repeat; */
     background: var(--background-color) url('BGlines.svg') center -400px/cover fixed no-repeat;
-        /* background: var(--background-color) url('BGlines.svg') center -80px/cover fixed no-repeat; */
     /* background: var(--background-color) url('BGlines.svg') top/cover fixed no-repeat; */
     display: flex;
     align-items: flex-end;
@@ -383,8 +385,8 @@ body {
 
 .message {
     max-width: 70%;
-    padding: 8px 12px;
-    border-radius: 12px;
+    padding: 20px 25px;
+    border-radius: 16px;
     margin-bottom: 4px;
     word-wrap: break-word;
     white-space: pre-wrap;
@@ -402,7 +404,7 @@ body {
 }
 
 .message.host {
-    width: 50%;
+    max-width: 70%;
     margin-left: auto;
     margin-right: 0;
     border-bottom-right-radius: 1px;
@@ -410,8 +412,12 @@ body {
     color: var(--text-touqose);
 }
 
+.message.self {
+    opacity: 0.8;
+}
+
 .message.disconnected {
-    opacity: 0.25;
+    opacity: 0.5;
 }
 
 .message.guest.disconnected {
@@ -585,11 +591,11 @@ body {
 
 @media (max-width: 768px) {
     .message {
-        width: 70%;
+        max-width: 70%;
     }
     
     .message.host {
-        width: 70%;
+        max-width: 70%;
     }
     
     .input-area {
@@ -606,11 +612,11 @@ body {
 
 @media (max-width: 480px) {
     .message {
-        width: 85%;
+        max-width: 85%;
     }
     
     .message.host {
-        width: 85%;
+        max-width: 85%;
     }
     .messages {
         background: var(--background-color) url('BGlines.svg') center -80px/cover fixed no-repeat;

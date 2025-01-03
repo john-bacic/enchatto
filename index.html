@@ -43,12 +43,18 @@
             <div id="chat-screen" class="screen">
                 <div id="messages" class="messages"></div>
                 <div class="input-area">
-                    <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
-                    <button id="sendBtn">Send</button>
+                    <textarea id="messageInput" placeholder="Type your message..." autocomplete="off"></textarea>
+                    <button id="sendBtn">
+                        <svg width="16" height="13" viewBox="0 0 16 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7.13398 0.499999C7.51888 -0.166668 8.48113 -0.166667 8.86603 0.5L14.9282 11C15.3131 11.6667 14.832 12.5 14.0622 12.5H1.93782C1.16802 12.5 0.686897 11.6667 1.0718 11L7.13398 0.499999Z" fill="#1A1B25"/>
+                            </svg>
+                    </button>
                 </div>
             </div>
         </div>
     </div>
     <script src="app.js"></script>
+    <script src="socket.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

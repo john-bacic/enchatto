@@ -101,7 +101,7 @@ function updateParticipants(newClientList) {
         if (oldClient && oldClient.name !== newClient.name) {
             // Name has changed, update all message labels for this user
             document.querySelectorAll(`.message[data-sender="${newClient.id}"] .guest-label`).forEach(label => {
-                label.textContent = newClient.name || (newClient.isHost ? 'Host' : `Guest ${newClient.colorIndex + 1}`);
+                label.textContent = newClient.name || (newClient.isHost ? '(^_^)ノ' : `Guest ${newClient.colorIndex + 1}`);
             });
         }
     });
@@ -118,7 +118,7 @@ function updateParticipants(newClientList) {
     // Update host indicator and name
     if (hostOnline) {
         hostIndicator.classList.add('online');
-        hostName.textContent = hostClient.name || 'Host';
+        hostName.textContent = hostClient.name || '(^_^)ノ';
         if (hostClient.id === clientId) {
             makeNameEditable(hostName, true);
         }

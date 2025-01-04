@@ -314,7 +314,7 @@ body {
 .participant {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 1px;
     font-size: 0.9rem;
     color: #495057;
     padding: 4px 8px;
@@ -327,12 +327,13 @@ body {
 }
 
 .status-indicator {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background-color: var(--text-touqose);
     display: inline-block;
     margin-left: 0px;
+    margin-right: 5px;
     transition: background-color 0.3s ease;
 }
 
@@ -374,9 +375,11 @@ body {
 }
 
 [contenteditable=true]:empty:before {
-    content: 'Your name';
+    content: 'change';
     color: #999;
     font-style: italic;
+    font-size: 0.8em;
+    padding: 0px 3px;
 }
 
 .messages {

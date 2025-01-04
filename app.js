@@ -245,7 +245,7 @@ function createParticipantElement(id, isGuest = true) {
     
     const name = document.createElement('span');
     name.className = 'name';
-    name.textContent = isGuest ? `Guest ${participants.size}` : 'Me (Host)';
+    name.textContent = isGuest ? `Guest ${participants.size}` : 'Me ((^_^)ノ)';
     
     participant.appendChild(indicator);
     participant.appendChild(name);
@@ -265,7 +265,7 @@ function handleReceivedMessage(data) {
         // Add guest label for host messages too
         const label = document.createElement('div');
         label.className = 'guest-label';
-        label.textContent = 'Host';
+        label.textContent = '(^_^)ノ';
         messageDiv.appendChild(label);
     } else {
         messageDiv.classList.add('guest');

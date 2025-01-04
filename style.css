@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;900&display=swap');
 
 :root {
     /* Main theme colors */
@@ -111,11 +112,22 @@ body {
 
 .header-main h1 {
     margin: 0;
+    transform: translateY(-4px);
+    padding-left: 8px;
+    font-family: 'Lexend', sans-serif;
     font-size: 1.5rem;
     font-weight: 900;
-    color: color-mix(in srgb, var(--black) 100%, var(--black));
-    opacity: 0.5;
+    color: rgba(0, 0, 0, 0.5);
+    /* text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.075); */
 }
+
+.japanese-text {
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 1.7rem;
+    font-weight: 900;
+    color: rgba(0, 0, 0, 0.5);
+}
+
 
 #minimizeBtn {
     background: none;
@@ -278,7 +290,7 @@ body {
     width: auto;
     background: var(--background-darker-color);
     border-bottom: 1px solid var(--background-darker-color);
-    padding: 5px;
+    padding: 5px 8px 5px 8px;
     margin: 5px 10px 0px 10px;
     display: flex;
     justify-content: space-between;

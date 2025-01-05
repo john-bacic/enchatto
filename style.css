@@ -331,12 +331,12 @@ body {
 .status-indicator {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
     background-color: var(--text-touqose);
     display: inline-block;
-    margin-left: 5px;
-    margin-right: 5px;
+    margin-left: 3px;
+    margin-right: 3px;
     transition: background-color 0.3s ease;
+    transform: rotate(45deg);
 }
 
 .participant.disconnected .status-indicator {
@@ -677,5 +677,5 @@ body {
     width: 100%;
     height: 100%;
     /* Remove color property since we'll set it via JavaScript */
-    filter: drop-shadow(1px 1px 0px rgba(0, 0, 0, 0.25));
+    filter: drop-shadow(2px 2px 1px rgba(0, 0, 0, 0.25));
 }

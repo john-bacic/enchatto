@@ -366,6 +366,10 @@ function sendMessage() {
         messageInput.value = '';
         resetToDefault();
         
+        // Hide send button and adjust spacing
+        sendBtn.classList.remove('visible');
+        messageInput.style.marginRight = '20px';
+        
         // Send via WebSocket
         ws.send(JSON.stringify({
             type: 'message',

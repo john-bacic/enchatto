@@ -4,6 +4,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputArea = messageInput.parentElement;
     const DEFAULT_HEIGHT = '48px';
 
+    function updateSendButtonVisibility() {
+        if (messageInput.value.trim().length > 0) {
+            sendBtn.classList.add('visible');
+            messageInput.style.marginRight = '10px';
+        } else {
+            sendBtn.classList.remove('visible');
+            messageInput.style.marginRight = '20px';
+        }
+    }
+
     function resetToDefault() {
         console.log('resetToDefault called');
         // Force reflow
@@ -16,11 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function adjustHeight() {
-        // console.log('adjustHeight called with value:', messageInput.value);
         // Reset to default if placeholder is showing (input is empty)
         if (!messageInput.value) {
             resetToDefault();
-            // console.log('Reset to default - input is empty');
             return;
         }
 
@@ -31,7 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Calculate new height based on content
         const newHeight = Math.min(Math.max(messageInput.scrollHeight, 47), 120);
-        // console.log('New height calculated:', newHeight);
         messageInput.style.height = newHeight + 'px';
         
         // Adjust input area height
@@ -45,8 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle all text changes (including deletion)
     messageInput.addEventListener('input', (e) => {
-        // console.log('Input event fired');
         adjustHeight();
+        updateSendButtonVisibility();
     });
 
     // Handle Enter key for manual line breaks
@@ -63,35 +70,17 @@ document.addEventListener('DOMContentLoaded', () => {
             messageInput.selectionStart = messageInput.selectionEnd = start + 1;
             
             adjustHeight();
+            updateSendButtonVisibility();
         } else if (e.key === 'Backspace' && messageInput.value.length <= 1) {
             // If backspace will make the input empty, reset height
-            setTimeout(resetToDefault, 0);
+            setTimeout(() => {
+                resetToDefault();
+                updateSendButtonVisibility();
+            }, 0);
         }
     });
 
-    // Send message only when send button is clicked
-    sendBtn.addEventListener('click', () => {
-        const message = messageInput.value.trim();
-        if (message) {
-            // Clear content first
-            messageInput.value = '';
-            
-            // Reset height in multiple steps to ensure it takes effect
-            resetToDefault();
-            // messageInput.style.height = 'auto';
-            // messageInput.offsetHeight; // Force reflow
-            // messageInput.style.height = DEFAULT_HEIGHT;
-            inputArea.style.height = '68px';
-            
-            // Force another reflow
-            messageInput.offsetHeight;
-            
-            // Trigger input event for good measure
-            messageInput.dispatchEvent(new Event('input'));
-        }
-    });
-
-    // Set initial height and add initial logging
-    // console.log('Setting initial height');
+    // Set initial state
     resetToDefault();
+    updateSendButtonVisibility();
 });

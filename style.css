@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@300;400;500;700;900&display=swap');
 
 :root {
     /* Main theme colors */
@@ -8,6 +8,7 @@
     --background-color: #1A1B25;
     --background-darker-color: #16171F;
     --text-color: #212529;
+
     
     /* Status colors */
     --online-color: #28a745;
@@ -114,7 +115,8 @@ body {
     margin: 0;
     transform: translateY(-4px);
     padding-left: 8px;
-    font-family: 'Lexend', sans-serif;
+    /* font-family: 'Lexend', sans-serif; */
+    font-family: 'M PLUS Rounded 1c', sans-serif;
     font-size: 1.5rem;
     font-weight: 900;
     color: rgba(0, 0, 0, 0.5);
@@ -122,7 +124,7 @@ body {
 }
 
 .japanese-text {
-    font-family: 'Noto Sans JP', sans-serif;
+    font-family: 'M PLUS Rounded 1c', sans-serif;
     font-size: 1.7rem;
     font-weight: 900;
     color: rgba(0, 0, 0, 0.5);
@@ -659,4 +661,21 @@ body {
     .messages {
         background: var(--background-color) url('BGlines.svg') center -80px/cover fixed no-repeat;
     }
+}
+
+.enchatto_title {
+    width: 141px;
+    height: 31px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.enchatto_title svg {
+    width: 100%;
+    height: 100%;
+    /* Remove color property since we'll set it via JavaScript */
+    filter: drop-shadow(1px 1px 0px rgba(0, 0, 0, 0.25));
 }

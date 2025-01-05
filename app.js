@@ -492,26 +492,34 @@ function connectToRoom(roomId) {
                     // Color the header and send button
                     const header = document.querySelector('.header-main');
                     const sendButton = document.getElementById('sendBtn');
+                    const svgPaths = document.querySelectorAll('.enchatto_title svg path[fill]');
                     header.style.backgroundColor = myColor;
                     header.style.color = '#ffffff';
                     sendButton.style.backgroundColor = myColor;
                     sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
                     sendButton.style.border = 'none';
+                    // Update SVG paths to match header color with increased vibrancy
+                    const vibrantColor = `color-mix(in srgb, ${myColor} 75%, black)`;
+                    svgPaths.forEach(path => path.setAttribute('fill', vibrantColor));
                 } else {
                     // Make host name editable and set initial header state
                     const hostName = document.getElementById('hostName');
                     makeNameEditable(hostName, true);
                     setHeaderExpanded(true);
-                    
-                    // Get the computed background color of the header
+
+                    // Set host colors
                     const header = document.querySelector('.header-main');
-                    const headerColor = getComputedStyle(header).backgroundColor;
-                    
-                    // Set host send button to match header color
                     const sendButton = document.getElementById('sendBtn');
-                    sendButton.style.backgroundColor = headerColor;
+                    const svgPaths = document.querySelectorAll('.enchatto_title svg path[fill]');
+                    const myColor = '#68B7CF';  // Host color
+                    header.style.backgroundColor = myColor;
+                    header.style.color = '#ffffff';
+                    sendButton.style.backgroundColor = myColor;
                     sendButton.style.color = 'color-mix(in srgb, var(--black) 100%, var(--black))';
                     sendButton.style.border = 'none';
+                    // Update SVG paths to match header color with increased vibrancy
+                    const vibrantColor = `color-mix(in srgb, ${myColor} 85%, black)`;
+                    svgPaths.forEach(path => path.setAttribute('fill', vibrantColor));
                 }
                 
                 updateParticipants(data.clients);

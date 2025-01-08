@@ -154,6 +154,21 @@ wss.on('connection', (ws, req) => {
                         client.ws.send(JSON.stringify(messageObj));
                     }
                 });
+            } else if (message.type === 'typing' || message.type === 'stopTyping') {
+                // Broadcast typing status to other clients in the room
+                const room = rooms.get(message.roomId);
+                if (!room) return;
+
+                // Forward typing status to all other clients in the room
+                room.clients.forEach(client => {
+                    if (client.ws.readyState === WebSocket.OPEN && client.clientId !== ws.clientId) {
+                        client.ws.send(JSON.stringify({
+                            type: message.type,
+                            isHost: message.isHost,
+                            clientId: message.clientId
+                        }));
+                    }
+                });
             }
         } catch (error) {
             console.error('Error handling message:', error);

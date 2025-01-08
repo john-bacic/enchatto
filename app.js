@@ -18,6 +18,7 @@ let isReconnecting = false;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY = 2000;
+let typingTimer;
 
 // Get guest color by index - this is now fixed per guest
 function getGuestColor(colorIndex) {
@@ -134,13 +135,19 @@ function updateParticipants(newClientList) {
     // Add each guest
     sortedGuests.forEach((client) => {
         const participantEl = document.createElement('div');
-        participantEl.className = 'participant';
+        participantEl.className = 'participant guest';
         participantEl.id = `participant-${client.id}`;
         
-        const indicator = document.createElement('span');
-        indicator.className = 'status-indicator online';
-        const guestColor = getGuestColor(client.colorIndex);
-        indicator.style.backgroundColor = guestColor;
+        const indicator = document.createElement('div');
+        indicator.className = 'status-indicator';
+        
+        // Add the three status dots
+        for (let i = 0; i < 3; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'status-dot';
+            dot.style.backgroundColor = getGuestColor(client.colorIndex);
+            indicator.appendChild(dot);
+        }
         
         const name = document.createElement('span');
         name.className = 'name';
@@ -153,7 +160,7 @@ function updateParticipants(newClientList) {
             name.textContent = client.name || `Guest ${client.colorIndex + 1}`;
         }
         
-        name.style.color = guestColor;
+        name.style.color = getGuestColor(client.colorIndex);
         
         participantEl.appendChild(indicator);
         participantEl.appendChild(name);
@@ -163,7 +170,7 @@ function updateParticipants(newClientList) {
         participants.set(client.id, {
             number: client.colorIndex + 1,
             name: client.name,
-            color: guestColor,
+            color: getGuestColor(client.colorIndex),
             isHost: client.isHost
         });
     });
@@ -255,53 +262,73 @@ function createParticipantElement(id, isGuest = true) {
 
 // Handle received messages
 function handleReceivedMessage(data) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message';
-    messageDiv.dataset.sender = data.senderId; // Add sender ID as data attribute
-    
-    // Add host/guest class based on sender's role
-    if (data.isHost) {
-        messageDiv.classList.add('host');
-        // Add guest label for host messages too
-        const label = document.createElement('div');
-        label.className = 'guest-label';
-        label.textContent = '(^_^)ノ';
-        messageDiv.appendChild(label);
-    } else {
-        messageDiv.classList.add('guest');
-        // Get sender info for guest messages
-        const sender = participants.get(data.senderId);
-        if (sender) {
-            messageDiv.style.backgroundColor = sender.color;
-            // Add guest label
+    if (data.type === 'typing') {
+        const selector = data.isHost ? '.host .status-indicator' : `.participant.guest#participant-${data.clientId} .status-indicator`;
+        console.log('Typing selector:', selector);
+        const statusIndicator = document.querySelector(selector);
+        if (statusIndicator) {
+            statusIndicator.querySelectorAll('.status-dot').forEach(dot => {
+                dot.classList.add('typing');
+            });
+        }
+    } else if (data.type === 'stopTyping') {
+        const selector = data.isHost ? '.host .status-indicator' : `.participant.guest#participant-${data.clientId} .status-indicator`;
+        console.log('Stop typing selector:', selector);
+        const statusIndicator = document.querySelector(selector);
+        if (statusIndicator) {
+            statusIndicator.querySelectorAll('.status-dot').forEach(dot => {
+                dot.classList.remove('typing');
+            });
+        }
+    } else if (data.type === 'message') {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        messageDiv.dataset.sender = data.senderId; // Add sender ID as data attribute
+        
+        // Add host/guest class based on sender's role
+        if (data.isHost) {
+            messageDiv.classList.add('host');
+            // Add guest label for host messages too
             const label = document.createElement('div');
             label.className = 'guest-label';
-            label.textContent = sender.name || `Guest ${sender.number}`;
-            label.style.color = sender.color;
+            label.textContent = '(^_^)ノ';
             messageDiv.appendChild(label);
+        } else {
+            messageDiv.classList.add('guest');
+            // Get sender info for guest messages
+            const sender = participants.get(data.senderId);
+            if (sender) {
+                messageDiv.style.backgroundColor = sender.color;
+                // Add guest label
+                const label = document.createElement('div');
+                label.className = 'guest-label';
+                label.textContent = sender.name || `Guest ${sender.number}`;
+                label.style.color = sender.color;
+                messageDiv.appendChild(label);
+            }
         }
+        
+        // Check if sender is disconnected
+        if (!clientList.some(client => client.id === data.senderId)) {
+            messageDiv.classList.add('disconnected');
+        }
+        
+        // Add self indicator if message is from current client
+        if (data.senderId === clientId) {
+            messageDiv.classList.add('self');
+        }
+        
+        const textDiv = document.createElement('div');
+        textDiv.className = 'text';
+        textDiv.textContent = data.content;  
+        messageDiv.appendChild(textDiv);
+        
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        // Update guest labels after adding new message
+        updateGuestLabels();
     }
-    
-    // Check if sender is disconnected
-    if (!clientList.some(client => client.id === data.senderId)) {
-        messageDiv.classList.add('disconnected');
-    }
-    
-    // Add self indicator if message is from current client
-    if (data.senderId === clientId) {
-        messageDiv.classList.add('self');
-    }
-    
-    const textDiv = document.createElement('div');
-    textDiv.className = 'text';
-    textDiv.textContent = data.content;  
-    messageDiv.appendChild(textDiv);
-    
-    messagesContainer.appendChild(messageDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    // Update guest labels after adding new message
-    updateGuestLabels();
 }
 
 // Update guest name in all their messages when it changes
@@ -383,6 +410,43 @@ sendBtn.addEventListener('click', () => {
     sendMessage();
     // Extra blur for mobile keyboard dismissal
     messageInput.blur();
+});
+
+messageInput.addEventListener('input', () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    // Send typing status
+    ws.send(JSON.stringify({
+        type: 'typing',
+        roomId: currentRoomId,
+        isHost: isHost,
+        clientId: clientId
+    }));
+
+    // Clear previous timer
+    clearTimeout(typingTimer);
+
+    // Send stop typing status immediately when input is empty
+    if (!messageInput.value.trim()) {
+        ws.send(JSON.stringify({
+            type: 'stopTyping',
+            roomId: currentRoomId,
+            isHost: isHost,
+            clientId: clientId
+        }));
+    } else {
+        // Set timer to stop typing indication after no input
+        typingTimer = setTimeout(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'stopTyping',
+                    roomId: currentRoomId,
+                    isHost: isHost,
+                    clientId: clientId
+                }));
+            }
+        }, 500); // Reduced from 1000ms to 500ms for quicker response
+    }
 });
 
 messageInput.addEventListener('keypress', (e) => {
@@ -476,6 +540,24 @@ function connectToRoom(roomId) {
                 updateParticipants(data.clients);
             } else if (data.type === 'message') {
                 handleReceivedMessage(data);
+            } else if (data.type === 'typing') {
+                const selector = data.isHost ? '.host .status-indicator' : `.participant.guest#participant-${data.clientId} .status-indicator`;
+                console.log('Typing selector:', selector);
+                const statusIndicator = document.querySelector(selector);
+                if (statusIndicator) {
+                    statusIndicator.querySelectorAll('.status-dot').forEach(dot => {
+                        dot.classList.add('typing');
+                    });
+                }
+            } else if (data.type === 'stopTyping') {
+                const selector = data.isHost ? '.host .status-indicator' : `.participant.guest#participant-${data.clientId} .status-indicator`;
+                console.log('Stop typing selector:', selector);
+                const statusIndicator = document.querySelector(selector);
+                if (statusIndicator) {
+                    statusIndicator.querySelectorAll('.status-dot').forEach(dot => {
+                        dot.classList.remove('typing');
+                    });
+                }
             } else if (data.type === 'init') {
                 clientId = data.clientId;
                 isHost = data.isHost;

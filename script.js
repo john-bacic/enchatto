@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Handle all text changes (including deletion)
-    messageInput.addEventListener('input', (e) => {
+    messageInput.addEventListener('input', () => {
         adjustHeight();
         updateSendButtonVisibility();
     });

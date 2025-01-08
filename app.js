@@ -397,6 +397,13 @@ function sendMessage() {
         sendBtn.classList.remove('visible');
         messageInput.style.marginRight = '20px';
         
+        // Reset mic button state
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) {
+            micBtn.classList.remove('has-input');
+            micBtn.classList.remove('active');
+        }
+        
         // Send via WebSocket
         ws.send(JSON.stringify({
             type: 'message',

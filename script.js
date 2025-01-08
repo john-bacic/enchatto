@@ -22,6 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
             messageInput.value = transcript;
             updateSendButtonVisibility();
             adjustHeight();
+            micBtn.classList.remove('active');
+            micBtn.classList.add('has-input');
+            recognition.stop();
         };
 
         recognition.onerror = (event) => {
@@ -38,6 +41,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (micBtn) {
         micBtn.addEventListener('click', (e) => {
             e.preventDefault();
+            
+            // If there's input, clear it
+            if (micBtn.classList.contains('has-input')) {
+                messageInput.value = '';
+                micBtn.classList.remove('has-input');
+                updateSendButtonVisibility();
+                adjustHeight();
+                return;
+            }
+
             if (!recognition) {
                 // If speech recognition is not supported, try to trigger mobile keyboard speech input
                 messageInput.focus();
@@ -64,17 +77,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageInput.focus();
             }
         });
+
+        // Update mic button state when input changes
+        messageInput.addEventListener('input', () => {
+            if (messageInput.value.trim()) {
+                micBtn.classList.add('has-input');
+            } else {
+                micBtn.classList.remove('has-input');
+            }
+        });
     }
 
     function updateSendButtonVisibility() {
         if (messageInput.value.trim().length > 0) {
             sendBtn.classList.add('visible');
-            messageInput.style.marginRight = '10px';
+            messageInput.style.marginRight = '15px';
             micBtn.style.marginRight = '0px';
         } else {
             sendBtn.classList.remove('visible');
             messageInput.style.marginRight = '20px';
-            micBtn.style.marginRight = '10px';
+            micBtn.style.marginRight = '5px';
         }
     }
 

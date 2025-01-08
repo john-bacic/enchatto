@@ -82,7 +82,17 @@
             <div id="chat-screen" class="screen">
                 <div id="messages" class="messages"></div>
                 <div class="input-area">
-                    <textarea id="messageInput" placeholder="Type your message..." autocomplete="off"></textarea>
+                    <div class="input-wrapper">
+                        <textarea id="messageInput" placeholder="Type your message..." autocomplete="off"></textarea>
+                        <button id="micBtn" class="mic-button">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        </button>
+                    </div>
                     <button id="sendBtn">
                         <svg width="16" height="13" viewBox="0 0 16 13" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M7.13398 0.499999C7.51888 -0.166668 8.48113 -0.166667 8.86603 0.5L14.9282 11C15.3131 11.6667 14.832 12.5 14.0622 12.5H1.93782C1.16802 12.5 0.686897 11.6667 1.0718 11L7.13398 0.499999Z" fill="#1A1B25"/>

@@ -216,36 +216,23 @@ wss.on('connection', (ws, req) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3005;
+const PORT = 3005;
 server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
+    const networkInterfaces = os.networkInterfaces();
+    const addresses = [];
     
-    // Get deployment URL
-    const isProduction = process.env.NODE_ENV === 'production';
-    const deploymentURL = isProduction ? 'https://enchatto.onrender.com' : `http://localhost:${PORT}`;
-    
-    console.log('\nAccess URLs:');
-    console.log(`Local: ${deploymentURL}`);
-    
-    // Only show network URL and QR code in development
-    if (!isProduction) {
-        // Get local IP address
-        const interfaces = os.networkInterfaces();
-        let localIP;
-        
-        Object.keys(interfaces).forEach((interfaceName) => {
-            interfaces[interfaceName].forEach((interface) => {
-                if (interface.family === 'IPv4' && !interface.internal) {
-                    localIP = interface.address;
-                }
-            });
+    Object.keys(networkInterfaces).forEach((interfaceName) => {
+        networkInterfaces[interfaceName].forEach((interface) => {
+            if (interface.family === 'IPv4' && !interface.internal) {
+                addresses.push(interface.address);
+            }
         });
-        
-        const networkURL = localIP ? `http://${localIP}:${PORT}` : null;
-        if (networkURL) {
-            console.log(`Network: ${networkURL}`);
-            console.log('\nQR Code for Network URL:');
-            qrcode.generate(networkURL, { small: false });
-        }
-    }
+    });
+    
+    console.log('Access your chat room at:');
+    addresses.forEach(address => {
+        console.log(`http://${address}:${PORT}`);
+        qrcode.generate(`http://${address}:${PORT}`, {small: true});
+    });
 });

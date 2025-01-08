@@ -1,16 +1,80 @@
 document.addEventListener('DOMContentLoaded', () => {
     const messageInput = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
-    const inputArea = messageInput.parentElement;
+    const micBtn = document.getElementById('micBtn');
+    const inputArea = messageInput.parentElement.parentElement;
     const DEFAULT_HEIGHT = '48px';
+
+    // Speech recognition setup
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US'; // You can make this configurable later
+
+        recognition.onresult = (event) => {
+            const transcript = Array.from(event.results)
+                .map(result => result[0].transcript)
+                .join('');
+            
+            messageInput.value = transcript;
+            updateSendButtonVisibility();
+            adjustHeight();
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            micBtn.classList.remove('active');
+        };
+
+        recognition.onend = () => {
+            micBtn.classList.remove('active');
+        };
+    }
+
+    // Microphone button click handler
+    if (micBtn) {
+        micBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!recognition) {
+                // If speech recognition is not supported, try to trigger mobile keyboard speech input
+                messageInput.focus();
+                if (window.matchMedia('(max-width: 768px)').matches) {
+                    // Add speech input type for mobile devices
+                    messageInput.setAttribute('x-webkit-speech', '');
+                    messageInput.setAttribute('speech', '');
+                    
+                    // Trigger click on the speech input button if available
+                    const speechButton = messageInput.querySelector('::-webkit-input-speech-button');
+                    if (speechButton) {
+                        speechButton.click();
+                    }
+                }
+                return;
+            }
+
+            if (micBtn.classList.contains('active')) {
+                recognition.stop();
+                micBtn.classList.remove('active');
+            } else {
+                recognition.start();
+                micBtn.classList.add('active');
+                messageInput.focus();
+            }
+        });
+    }
 
     function updateSendButtonVisibility() {
         if (messageInput.value.trim().length > 0) {
             sendBtn.classList.add('visible');
             messageInput.style.marginRight = '10px';
+            micBtn.style.marginRight = '0px';
         } else {
             sendBtn.classList.remove('visible');
             messageInput.style.marginRight = '20px';
+            micBtn.style.marginRight = '10px';
         }
     }
 

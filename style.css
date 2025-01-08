@@ -535,6 +535,49 @@ body {
     align-items: flex-end;
 }
 
+.input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items:  flex-end;
+}
+
+.input-wrapper textarea {
+    width: 100%;
+    padding-right: 40px;
+}
+
+.mic-button {
+    position: absolute;
+    right: 30px;
+    bottom: 10px;
+    background: none;
+    border: none;
+    padding: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+    z-index: 2;
+}
+
+.mic-button:hover {
+    opacity: 1;
+}
+
+.mic-button.active {
+    opacity: 1;
+    color: var(--primary-color);
+}
+
+.mic-button svg {
+    width: 18px;
+    height: 18px;
+}
+
 #messageInput {
     flex: 1;
     padding: 12px 20px;

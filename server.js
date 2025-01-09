@@ -15,6 +15,8 @@ app.use(express.static(path.join(__dirname)));
 // Store active rooms and their connections
 const rooms = new Map();
 
+const PORT = 3005;
+
 // Generate unique client ID
 function generateClientId() {
     return Math.random().toString(36).substring(2, 15);
@@ -216,7 +218,6 @@ wss.on('connection', (ws, req) => {
 });
 
 // Start server
-const PORT = 3005;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     const networkInterfaces = os.networkInterfaces();

@@ -8,32 +8,89 @@ document.addEventListener('DOMContentLoaded', () => {
     // Speech recognition setup
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
+    let recognitionTimeout = null;
+    let silenceTimeout = null;
+    const SPEECH_TIMEOUT = 30000; // 30 seconds max duration
+    const SILENCE_TIMEOUT = 1000; // 1 second of silence before stopping
+
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
-        recognition.continuous = false;
+        recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US'; // You can make this configurable later
 
+        recognition.onstart = () => {
+            micBtn.classList.add('active');
+            // Set timeout to stop recording after SPEECH_TIMEOUT
+            recognitionTimeout = setTimeout(() => {
+                recognition.stop();
+                micBtn.classList.remove('active');
+                micBtn.classList.add('has-input');
+            }, SPEECH_TIMEOUT);
+        };
+
         recognition.onresult = (event) => {
-            const transcript = Array.from(event.results)
+            // Clear any existing silence timeout
+            if (silenceTimeout) {
+                clearTimeout(silenceTimeout);
+                silenceTimeout = null;
+            }
+
+            const results = Array.from(event.results);
+            const transcript = results
                 .map(result => result[0].transcript)
                 .join('');
             
             messageInput.value = transcript;
             updateSendButtonVisibility();
             adjustHeight();
-            micBtn.classList.remove('active');
-            micBtn.classList.add('has-input');
-            recognition.stop();
+
+            // Only set silence timeout if this is a final result
+            if (results.some(result => result.isFinal)) {
+                // Set new silence timeout
+                silenceTimeout = setTimeout(() => {
+                    recognition.stop();
+                    micBtn.classList.remove('active');
+                    micBtn.classList.add('has-input');
+                    // Make sure send button is visible if there's content
+                    updateSendButtonVisibility();
+                }, SILENCE_TIMEOUT);
+            }
         };
 
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
             micBtn.classList.remove('active');
+            if (recognitionTimeout) {
+                clearTimeout(recognitionTimeout);
+                recognitionTimeout = null;
+            }
+            if (silenceTimeout) {
+                clearTimeout(silenceTimeout);
+                silenceTimeout = null;
+            }
         };
 
         recognition.onend = () => {
             micBtn.classList.remove('active');
+            if (recognitionTimeout) {
+                clearTimeout(recognitionTimeout);
+                recognitionTimeout = null;
+            }
+            if (silenceTimeout) {
+                clearTimeout(silenceTimeout);
+                silenceTimeout = null;
+            }
+            // Make sure the send button is visible if there's content
+            updateSendButtonVisibility();
+        };
+
+        // Add audioend event to detect when user stops speaking
+        recognition.onaudioend = () => {
+            if (messageInput.value.trim()) {
+                micBtn.classList.add('has-input');
+                updateSendButtonVisibility();
+            }
         };
     }
 
@@ -71,6 +128,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (micBtn.classList.contains('active')) {
                 recognition.stop();
                 micBtn.classList.remove('active');
+                if (recognitionTimeout) {
+                    clearTimeout(recognitionTimeout);
+                    recognitionTimeout = null;
+                }
+                if (silenceTimeout) {
+                    clearTimeout(silenceTimeout);
+                    silenceTimeout = null;
+                }
             } else {
                 recognition.start();
                 micBtn.classList.add('active');
@@ -91,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateSendButtonVisibility() {
         if (messageInput.value.trim().length > 0) {
             sendBtn.classList.add('visible');
-            messageInput.style.marginRight = '15px';
+            messageInput.style.marginRight = '10px';
             micBtn.style.marginRight = '0px';
         } else {
             sendBtn.classList.remove('visible');
@@ -138,6 +203,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle all text changes (including deletion)
     messageInput.addEventListener('input', () => {
+        // Cancel any ongoing speech synthesis
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
         adjustHeight();
         updateSendButtonVisibility();
     });
